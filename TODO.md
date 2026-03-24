@@ -28,29 +28,29 @@
 ## A Fazer 🔲
 
 ### totem-pwa (App Kiosk)
-- [ ] Tela de ativação (input codigo_totem + chave_ativacao)
-- [ ] Tela inicial com lista de questionários
-- [ ] Tela de avaliação com questões dinâmicas
-- [ ] Suporte offline (usar offline-sync package)
-- [ ] Sync automático quando online
-- [ ] Tela de obrigado/aprovado
-- [ ] PWA manifest + service worker
-- [ ] Configurar manifest.json para kiosk
+- [x] Tela de ativação (input codigo_totem + chave_ativacao)
+- [x] Tela inicial com lista de questionários
+- [x] Tela de avaliação com questões dinâmicas
+- [x] Suporte offline (usar offline-sync package)
+- [x] Sync automático quando online
+- [x] Tela de obrigado/aprovado
+- [x] PWA manifest + service worker
+- [x] Configurar manifest.json para kiosk
 
 ### admin-web (Painel Admin)
-- [ ] Dashboard com estatísticas
-- [ ] CRUD de unidades
-- [ ] CRUD de totens (gerar códigos + chaves)
-- [ ] CRUD de questionários
-- [ ] CRUD de questões
-- [ ] Visualizar avaliações
+- [x] Dashboard com estatísticas
+- [x] CRUD de unidades
+- [x] CRUD de totens (gerar códigos + chaves)
+- [x] CRUD de questionários
+- [x] CRUD de questões
+- [x] Visualizar avaliações
 - [ ] Filtros e relatórios
 - [ ] Autenticação admin
 
 ### offline-sync (Motor Sync)
-- [ ] Implementar SyncManager com retry logic
-- [ ] Listener para online/offline events
-- [ ] Background sync quando reconnectar
+- [x] Implementar SyncManager com retry logic
+- [x] Listener para online/offline events
+- [x] Background sync quando reconnectar
 - [ ] Queue de sincronização
 
 ### Database
