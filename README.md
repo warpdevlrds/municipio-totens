@@ -134,6 +134,7 @@ supabase functions deploy <nome> # Deploy function específica
 | [GLOSSARY.md](./GLOSSARY.md) | Glossário de termos |
 | [TODO.md](./TODO.md) | Lista de tarefas |
 | [AGENTS.md](./AGENTS.md) | Instruções para AI agents |
+| [AGENT_PROMPT.md](./AGENT_PROMPT.md) | Handoff rápido para agentes externos |
 
 ## Edge Functions
 
