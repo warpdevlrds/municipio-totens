@@ -120,3 +120,269 @@ export async function getSyncStats(): Promise<{ total: number; synced: number; p
     pending: all - synced
   }
 }
+
+// ============================================
+// SYNC QUEUE - Sistema de fila de sincronização
+// ============================================
+
+export interface SyncQueueItem {
+  id?: number
+  type: 'evaluation'
+  payload: PendingEvaluation
+  retries: number
+  maxRetries: number
+  nextRetryAt: number
+  createdAt: string
+  lastError?: string
+}
+
+class SyncQueueDatabase extends Dexie {
+  queue!: Table<SyncQueueItem, number>
+
+  constructor() {
+    super('SyncQueueDB')
+    
+    this.version(1).stores({
+      queue: '++id, type, nextRetryAt, retries'
+    })
+  }
+}
+
+export const syncQueueDb = new SyncQueueDatabase()
+
+const INITIAL_RETRY_DELAY = 1000 // 1 segundo
+const MAX_RETRY_DELAY = 300000 // 5 minutos
+const DEFAULT_MAX_RETRIES = 5
+const BATCH_SIZE = 10
+
+function calculateBackoff(retries: number): number {
+  const delay = Math.min(INITIAL_RETRY_DELAY * Math.pow(2, retries), MAX_RETRY_DELAY)
+  // Adiciona jitter de até 10%
+  const jitter = delay * 0.1 * Math.random()
+  return delay + jitter
+}
+
+export async function addToSyncQueue(evaluation: PendingEvaluation): Promise<number> {
+  return syncQueueDb.queue.add({
+    type: 'evaluation',
+    payload: evaluation,
+    retries: 0,
+    maxRetries: DEFAULT_MAX_RETRIES,
+    nextRetryAt: Date.now(),
+    createdAt: new Date().toISOString()
+  })
+}
+
+export async function getReadyQueueItems(): Promise<SyncQueueItem[]> {
+  const now = Date.now()
+  return syncQueueDb.queue
+    .where('nextRetryAt')
+    .belowOrEqual(now)
+    .limit(BATCH_SIZE)
+    .toArray()
+}
+
+export async function markQueueItemFailed(id: number, error: string): Promise<void> {
+  const item = await syncQueueDb.queue.get(id)
+  if (!item) return
+
+  const newRetries = item.retries + 1
+  
+  if (newRetries >= item.maxRetries) {
+    // Move para "morto" - não tenta mais
+    await syncQueueDb.queue.update(id, {
+      retries: newRetries,
+      lastError: error,
+      nextRetryAt: Number.MAX_SAFE_INTEGER // Nunca mais será processado
+    })
+  } else {
+    const backoff = calculateBackoff(newRetries)
+    await syncQueueDb.queue.update(id, {
+      retries: newRetries,
+      lastError: error,
+      nextRetryAt: Date.now() + backoff
+    })
+  }
+}
+
+export async function removeFromQueue(id: number): Promise<void> {
+  await syncQueueDb.queue.delete(id)
+}
+
+export async function getQueueStats(): Promise<{
+  total: number
+  pending: number
+  failed: number
+  nextRetryIn: number | null
+}> {
+  const all = await syncQueueDb.queue.toArray()
+  const now = Date.now()
+  
+  const pending = all.filter(item => 
+    item.retries < item.maxRetries && item.nextRetryAt <= now
+  ).length
+  
+  const failed = all.filter(item => 
+    item.retries >= item.maxRetries
+  ).length
+  
+  const nextItem = all
+    .filter(item => item.retries < item.maxRetries && item.nextRetryAt > now)
+    .sort((a, b) => a.nextRetryAt - b.nextRetryAt)[0]
+  
+  return {
+    total: all.length,
+    pending,
+    failed,
+    nextRetryIn: nextItem ? nextItem.nextRetryAt - now : null
+  }
+}
+
+export async function clearFailedItems(): Promise<number> {
+  const failed = await syncQueueDb.queue
+    .filter(item => item.retries >= item.maxRetries)
+    .toArray()
+  
+  await syncQueueDb.queue.bulkDelete(failed.map(f => f.id!))
+  return failed.length
+}
+
+export async function retryFailedItems(): Promise<number> {
+  const failed = await syncQueueDb.queue
+    .filter(item => item.retries >= item.maxRetries)
+    .toArray()
+  
+  for (const item of failed) {
+    await syncQueueDb.queue.update(item.id!, {
+      retries: 0,
+      nextRetryAt: Date.now(),
+      lastError: undefined
+    })
+  }
+  
+  return failed.length
+}
+
+// Classe SyncManager com queue integrada
+type SyncFunction = (totemId: string, avaliacoes: any[]) => Promise<{
+  success: boolean
+  synced_ids: string[]
+}>
+
+export class SyncManager {
+  private isProcessing = false
+  private totemId: string | null = null
+  private syncFunction: SyncFunction | null = null
+  private intervalId: number | null = null
+  private onStatusChange?: (status: SyncStatus) => void
+
+  setTotemId(id: string): void {
+    this.totemId = id
+  }
+
+  setSyncFunction(fn: SyncFunction): void {
+    this.syncFunction = fn
+  }
+
+  setStatusCallback(callback: (status: SyncStatus) => void): void {
+    this.onStatusChange = callback
+  }
+
+  async start(intervalMs: number = 5000): Promise<void> {
+    if (this.intervalId) return
+    
+    this.intervalId = window.setInterval(() => {
+      this.processQueue()
+    }, intervalMs)
+
+    // Processa imediatamente
+    await this.processQueue()
+  }
+
+  stop(): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId)
+      this.intervalId = null
+    }
+  }
+
+  async processQueue(): Promise<void> {
+    if (this.isProcessing || !this.totemId || !this.syncFunction) return
+    if (!navigator.onLine) return
+
+    this.isProcessing = true
+    this.notifyStatus('syncing')
+
+    try {
+      // Primeiro, move avaliações pendentes para a queue
+      const pendingEvals = await getPendingEvaluations()
+      for (const eval_ of pendingEvals) {
+        const exists = await syncQueueDb.queue
+          .filter(item => item.payload.client_id === eval_.client_id)
+          .first()
+        
+        if (!exists) {
+          await addToSyncQueue(eval_)
+        }
+      }
+
+      // Processa items da queue prontos para retry
+      const readyItems = await getReadyQueueItems()
+      
+      if (readyItems.length === 0) {
+        this.notifyStatus('idle')
+        this.isProcessing = false
+        return
+      }
+
+      const evaluationsToSync = readyItems.map(item => ({
+        client_id: item.payload.client_id,
+        session_id: item.payload.session_id,
+        questionario_id: item.payload.questionario_id,
+        respostas: item.payload.respostas,
+        created_at: item.payload.created_at
+      }))
+
+      const result = await this.syncFunction(this.totemId, evaluationsToSync)
+
+      if (result.success) {
+        // Remove items sincronizados da queue
+        for (const item of readyItems) {
+          if (result.synced_ids.includes(item.payload.client_id)) {
+            await removeFromQueue(item.id!)
+            await markAsSynced([item.payload.client_id])
+          } else {
+            await markQueueItemFailed(item.id!, 'Não retornado na lista de sincronizados')
+          }
+        }
+        this.notifyStatus('success')
+      } else {
+        // Marca todos como falha
+        for (const item of readyItems) {
+          await markQueueItemFailed(item.id!, 'Sync retornou success=false')
+        }
+        this.notifyStatus('error')
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido'
+      const readyItems = await getReadyQueueItems()
+      for (const item of readyItems) {
+        await markQueueItemFailed(item.id!, errorMsg)
+      }
+      this.notifyStatus('error')
+    } finally {
+      this.isProcessing = false
+    }
+  }
+
+  private notifyStatus(status: SyncStatus): void {
+    if (this.onStatusChange) {
+      this.onStatusChange(status)
+    }
+  }
+}
+
+export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error'
+
+// Singleton do SyncManager
+export const syncManager = new SyncManager()
