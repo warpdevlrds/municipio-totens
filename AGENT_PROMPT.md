@@ -2,6 +2,12 @@
 
 Use este arquivo como ponto de entrada para qualquer agente externo que precise entrar no projeto sem contexto previo.
 
+## Regra Primordial
+
+- Nunca use Docker neste projeto.
+- Sempre use os CLIs diretamente, especialmente `supabase`, `gh`, `vercel`, `pnpm` e `git`.
+- Se algum comando sugerir dependência de Docker, abandone esse caminho e use um fluxo alternativo via CLI remota ou leitura dos arquivos versionados.
+
 ## Objetivo
 
 Este repositorio implementa um sistema de totens de avaliacao municipal com:
@@ -134,6 +140,7 @@ Se os previews ainda falharem:
 
 - use `pnpm`
 - use imports de workspace, nunca imports relativos cruzando apps/packages
+- nunca use Docker
 - use `supabase` CLI direto, sem Docker
 - rode builds a partir da raiz do repositorio
 - antes de mexer em deploy, confirme branch atual, PR atual e estado da Vercel

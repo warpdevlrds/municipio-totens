@@ -9,21 +9,74 @@ interface ConfigItem {
   descricao: string
 }
 
+interface LocalConfig {
+  tempoRedirecionamento: string
+  notificacoesEmail: boolean
+  temaEscuro: boolean
+  limiteAvaliacoesPorDia: string
+  tempoExpiracaoChave: string
+  backupAutomatico: boolean
+}
+
+const DEFAULT_CONFIG: LocalConfig = {
+  tempoRedirecionamento: '5',
+  notificacoesEmail: true,
+  temaEscuro: false,
+  limiteAvaliacoesPorDia: '100',
+  tempoExpiracaoChave: '30',
+  backupAutomatico: true
+}
+
+const CONFIG_DESCRIPTIONS = {
+  tempo_redirecionamento: 'Tempo na tela de agradecimento antes do retorno automatico.',
+  notificacoes_email: 'Habilita alertas por email sobre totens e relatorios.',
+  tema_escuro: 'Ativa o tema escuro nos totens.',
+  limite_avaliacoes_por_dia: 'Limite maximo de avaliacoes registradas por totem ao dia.',
+  tempo_expiracao_chave: 'Quantidade de dias ate a chave de ativacao expirar.',
+  backup_automatico: 'Indica se a exportacao automatica dos dados esta ativa.'
+} as const
+
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined) {
+    return fallback
+  }
+
+  return value === 'true'
+}
+
+function readStoredConfig(): LocalConfig | null {
+  const saved = localStorage.getItem('admin_config')
+
+  if (!saved) {
+    return null
+  }
+
+  try {
+    return JSON.parse(saved) as LocalConfig
+  } catch {
+    return null
+  }
+}
+
+function mapConfigsToLocalConfig(configs: ConfigItem[]): LocalConfig {
+  const configMap = new Map(configs.map((config) => [config.chave, config.valor]))
+
+  return {
+    tempoRedirecionamento: configMap.get('tempo_redirecionamento') || DEFAULT_CONFIG.tempoRedirecionamento,
+    notificacoesEmail: parseBoolean(configMap.get('notificacoes_email'), DEFAULT_CONFIG.notificacoesEmail),
+    temaEscuro: parseBoolean(configMap.get('tema_escuro'), DEFAULT_CONFIG.temaEscuro),
+    limiteAvaliacoesPorDia: configMap.get('limite_avaliacoes_por_dia') || DEFAULT_CONFIG.limiteAvaliacoesPorDia,
+    tempoExpiracaoChave: configMap.get('tempo_expiracao_chave') || DEFAULT_CONFIG.tempoExpiracaoChave,
+    backupAutomatico: parseBoolean(configMap.get('backup_automatico'), DEFAULT_CONFIG.backupAutomatico)
+  }
+}
+
 export function Configuracoes() {
   const [configs, setConfigs] = useState<ConfigItem[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-
-  // Configuracoes locais (sem banco)
-  const [localConfig, setLocalConfig] = useState({
-    tempoRedirecionamento: '5',
-    notificacoesEmail: true,
-    temaEscuro: false,
-    limiteAvaliacoesPorDia: '100',
-    tempoExpiracaoChave: '30',
-    backupAutomatico: true
-  })
+  const [localConfig, setLocalConfig] = useState<LocalConfig>(DEFAULT_CONFIG)
 
   useEffect(() => {
     loadConfigs()
@@ -38,10 +91,18 @@ export function Configuracoes() {
       
       if (!error && data) {
         setConfigs(data)
+        if (data.length > 0) {
+          setLocalConfig(mapConfigsToLocalConfig(data))
+          return
+        }
       }
     } catch (err) {
       // Silenciosamente falhar - tabela pode nao existir
     } finally {
+      const storedConfig = readStoredConfig()
+      if (storedConfig) {
+        setLocalConfig(storedConfig)
+      }
       setLoading(false)
     }
   }
@@ -51,28 +112,67 @@ export function Configuracoes() {
     setMessage(null)
 
     try {
-      // Salvar no localStorage como fallback
+      const rows = [
+        {
+          id: configs.find((config) => config.chave === 'tempo_redirecionamento')?.id,
+          chave: 'tempo_redirecionamento',
+          valor: localConfig.tempoRedirecionamento,
+          descricao: CONFIG_DESCRIPTIONS.tempo_redirecionamento
+        },
+        {
+          id: configs.find((config) => config.chave === 'notificacoes_email')?.id,
+          chave: 'notificacoes_email',
+          valor: String(localConfig.notificacoesEmail),
+          descricao: CONFIG_DESCRIPTIONS.notificacoes_email
+        },
+        {
+          id: configs.find((config) => config.chave === 'tema_escuro')?.id,
+          chave: 'tema_escuro',
+          valor: String(localConfig.temaEscuro),
+          descricao: CONFIG_DESCRIPTIONS.tema_escuro
+        },
+        {
+          id: configs.find((config) => config.chave === 'limite_avaliacoes_por_dia')?.id,
+          chave: 'limite_avaliacoes_por_dia',
+          valor: localConfig.limiteAvaliacoesPorDia,
+          descricao: CONFIG_DESCRIPTIONS.limite_avaliacoes_por_dia
+        },
+        {
+          id: configs.find((config) => config.chave === 'tempo_expiracao_chave')?.id,
+          chave: 'tempo_expiracao_chave',
+          valor: localConfig.tempoExpiracaoChave,
+          descricao: CONFIG_DESCRIPTIONS.tempo_expiracao_chave
+        },
+        {
+          id: configs.find((config) => config.chave === 'backup_automatico')?.id,
+          chave: 'backup_automatico',
+          valor: String(localConfig.backupAutomatico),
+          descricao: CONFIG_DESCRIPTIONS.backup_automatico
+        }
+      ]
+
+      const { data, error } = await supabase
+        .from('configuracoes')
+        .upsert(rows, { onConflict: 'chave' })
+        .select('*')
+
       localStorage.setItem('admin_config', JSON.stringify(localConfig))
-      
-      setMessage({ type: 'success', text: 'Configuracoes salvas com sucesso!' })
+
+      if (!error && data) {
+        setConfigs(data)
+      }
+
+      setMessage({
+        type: 'success',
+        text: error ? 'Configuracoes salvas localmente.' : 'Configuracoes salvas com sucesso!'
+      })
       setTimeout(() => setMessage(null), 3000)
-    } catch (err) {
+    } catch {
       setMessage({ type: 'error', text: 'Erro ao salvar configuracoes' })
     } finally {
       setSaving(false)
     }
   }
-
-  useEffect(() => {
-    const saved = localStorage.getItem('admin_config')
-    if (saved) {
-      try {
-        setLocalConfig(JSON.parse(saved))
-      } catch (e) {
-        // ignore
-      }
-    }
-  }, [])
 
   if (loading) {
     return <div className="loading">Carregando...</div>

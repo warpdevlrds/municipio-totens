@@ -11,6 +11,12 @@ Cidadãos avaliam atendimento em quiosques touch-screen. Dados sincronizam quand
 
 Este projeto usa ferramentas CLI para desenvolvimento. Todas as operações devem ser feitas via linha de comando.
 
+## Regra Primordial
+
+- Nunca use Docker neste projeto.
+- Sempre use os CLIs diretamente (`supabase`, `gh`, `vercel`, `pnpm`, `git`).
+- Se um comando sugerir Docker para inspeção ou operação local, interrompa e use um fluxo alternativo via CLI remota ou pelos arquivos versionados.
+
 ### Ferramentas Required
 
 | Ferramenta | Versão | Para que serve |
@@ -108,6 +114,8 @@ supabase functions deploy <nome>     # Deploy função específica
 supabase functions list               # Listar funções
 supabase functions log <nome>         # Ver logs
 ```
+
+**Regra obrigatória:** não usar `supabase start`, `supabase status`, `supabase db dump` local ou qualquer outro fluxo que dependa de Docker. Trabalhar sempre direto com o projeto remoto linkado ou com os arquivos do repositório.
 
 ### GitHub CLI
 
@@ -292,7 +300,7 @@ O projeto usa GitHub Actions para deploy automático:
 - Packages precisam de `vite` como devDependency para tipos
 
 ### Supabase CLI
-- Docker é opcional para deploy de functions
+- Docker não deve ser usado neste projeto
 - Migrations via `supabase db push` (não precisa Docker)
 
 ## Como Criar uma Nova Feature

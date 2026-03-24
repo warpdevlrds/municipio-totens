@@ -115,7 +115,7 @@ Componentes compartilhados (stub).
 
 #### Database Schema
 
-9 tabelas com RLS configurado:
+10 tabelas com RLS configurado:
 
 | Tabela | Descrição |
 |--------|-----------|
@@ -127,6 +127,7 @@ Componentes compartilhados (stub).
 | avaliacoes | Avaliações |
 | respostas | Respostas |
 | sync_log | Log de sincronizações |
+| configuracoes | Configurações operacionais |
 | totem_sessoes | Sessões ativas |
 
 ## Fluxo de Dados

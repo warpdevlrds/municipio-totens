@@ -220,6 +220,47 @@ ON CONFLICT (id) DO UPDATE SET
   expira_em = EXCLUDED.expira_em,
   ativo = EXCLUDED.ativo;
 
+INSERT INTO configuracoes (
+  chave,
+  valor,
+  descricao
+)
+VALUES
+  (
+    'tempo_redirecionamento',
+    '5',
+    'Tempo na tela de agradecimento antes do retorno automatico.'
+  ),
+  (
+    'notificacoes_email',
+    'true',
+    'Habilita alertas por email sobre totens e relatorios.'
+  ),
+  (
+    'tema_escuro',
+    'false',
+    'Ativa o tema escuro nos totens.'
+  ),
+  (
+    'limite_avaliacoes_por_dia',
+    '100',
+    'Limite maximo de avaliacoes registradas por totem ao dia.'
+  ),
+  (
+    'tempo_expiracao_chave',
+    '30',
+    'Quantidade de dias ate a chave de ativacao expirar.'
+  ),
+  (
+    'backup_automatico',
+    'true',
+    'Indica se a exportacao automatica dos dados esta ativa.'
+  )
+ON CONFLICT (chave) DO UPDATE SET
+  valor = EXCLUDED.valor,
+  descricao = EXCLUDED.descricao,
+  updated_at = NOW();
+
 -- Avaliacoes de exemplo
 INSERT INTO avaliacoes (
   id,

@@ -104,6 +104,7 @@ Terminais de avaliação.
 | status | totem_status | DEFAULT 'offline' | Status atual |
 | versao_app | VARCHAR(50) | | Versão do app |
 | ultimo_ping | TIMESTAMPTZ | | Último heartbeat |
+| last_heartbeat | TIMESTAMPTZ | GENERATED ALWAYS AS (ultimo_ping) STORED | Alias de compatibilidade consumido pelo dashboard admin |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | Data de atualização |
 
@@ -185,7 +186,7 @@ Respostas individuais de cada avaliação.
 | avaliacao_id | UUID | FK → avaliacoes(id) | Avaliação pai |
 | questao_id | UUID | FK → questoes(id) | Questão respondida |
 | valor_texto | TEXT | | Texto da resposta |
-| valor_nota | DECIMAL(3,2) | | Nota numérica |
+| valor_nota | DECIMAL(4,2) | | Nota numérica |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
 
 ### sync_log
@@ -201,6 +202,19 @@ Log de sincronizações para auditoria.
 | sucesso | BOOLEAN | DEFAULT false | Se foi bem sucedida |
 | erro_mensagem | TEXT | | Mensagem de erro |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | Data do log |
+
+### configuracoes
+
+Configurações operacionais consumidas pelo painel administrativo.
+
+| Coluna | Tipo | Constraints | Descrição |
+|--------|------|-------------|-----------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | Identificador único |
+| chave | TEXT | UNIQUE, NOT NULL | Chave lógica da configuração |
+| valor | TEXT | NOT NULL | Valor serializado da configuração |
+| descricao | TEXT | NOT NULL | Descrição operacional |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | Data de atualização |
 
 ### totem_sessoes
 
@@ -263,6 +277,7 @@ $$ language 'plpgsql';
 - unidades
 - questionarios
 - totens
+- configuracoes
 
 ## Row Level Security (RLS)
 
@@ -283,6 +298,7 @@ $$ language 'plpgsql';
 | respostas | ALL | Admin (futuro) |
 | sync_log | INSERT | Público |
 | sync_log | ALL | Admin (futuro) |
+| configuracoes | ALL | Admin (futuro) |
 | totem_sessoes | INSERT | Público |
 | totem_sessoes | UPDATE | Público |
 

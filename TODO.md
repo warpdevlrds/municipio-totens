@@ -9,7 +9,7 @@
 - [x] Build pipeline funcionando (7/7 packages)
 
 ### Backend (Supabase)
-- [x] Database schema com 9 tabelas
+- [x] Database schema com 10 tabelas
 - [x] Edge Functions deployadas:
   - `activate-totem` - Ativação com chave única
   - `sync-evaluations` - Sincronização de avaliações

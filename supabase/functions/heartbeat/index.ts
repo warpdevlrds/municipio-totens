@@ -6,6 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function isQuestionarioDisponivel(
+  questionario: { data_inicio?: string | null; data_fim?: string | null },
+  referenceDate: Date,
+) {
+  const startsAt = questionario.data_inicio ? new Date(questionario.data_inicio) : null
+  const endsAt = questionario.data_fim ? new Date(questionario.data_fim) : null
+
+  if (startsAt && startsAt > referenceDate) {
+    return false
+  }
+
+  if (endsAt && endsAt < referenceDate) {
+    return false
+  }
+
+  return true
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -25,7 +43,8 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    const now = new Date().toISOString()
+    const nowDate = new Date()
+    const now = nowDate.toISOString()
 
     // Atualizar totem
     const { error: updateError } = await supabase
@@ -83,11 +102,15 @@ serve(async (req) => {
     }
 
     // Buscar questionários atualizados (se houver novos)
-    const { data: questionarios } = await supabase
+    const { data: questionariosData } = await supabase
       .from('questionarios')
-      .select('id, versao, updated_at')
-      .eq('unidade_id', totem.unidade_id)
+      .select('id, versao, updated_at, data_inicio, data_fim')
       .eq('ativo', true)
+      .or(`unidade_id.eq.${totem.unidade_id},unidade_id.is.null`)
+
+    const questionarios = (questionariosData || [])
+      .filter((questionario) => isQuestionarioDisponivel(questionario, nowDate))
+      .map(({ id, versao, updated_at }) => ({ id, versao, updated_at }))
 
     return new Response(
       JSON.stringify({

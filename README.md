@@ -6,7 +6,7 @@ Sistema PWA offline-first para terminais de avaliação cidadã em órgãos púb
 
 ### ✅ Implementado
 - Infraestrutura monorepo (pnpm + Turborepo 2.0)
-- Database schema com 9 tabelas
+- Database schema com 10 tabelas
 - 3 Edge Functions deployadas
 - 5 packages TypeScript
 - Build pipeline funcionando
@@ -146,7 +146,7 @@ supabase functions deploy <nome> # Deploy function específica
 
 ## Database Schema
 
-9 tabelas com RLS configurado:
+10 tabelas com RLS configurado:
 
 | Tabela | Descrição |
 |--------|-----------|
@@ -158,6 +158,7 @@ supabase functions deploy <nome> # Deploy function específica
 | avaliacoes | Avaliações |
 | respostas | Respostas |
 | sync_log | Log de sincronizações |
+| configuracoes | Configurações operacionais |
 | totem_sessoes | Sessões ativas |
 
 ## Licença

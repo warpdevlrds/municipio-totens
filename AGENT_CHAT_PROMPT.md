@@ -3,6 +3,11 @@
 ```text
 Você vai continuar o trabalho no repositório `municipio-totens`.
 
+Regra primordial:
+- nunca use Docker neste projeto
+- sempre use os CLIs diretamente (`supabase`, `gh`, `vercel`, `pnpm`, `git`)
+- se um comando sugerir Docker, abandone esse caminho e escolha uma alternativa via CLI remota ou pelos arquivos do repositório
+
 Antes de qualquer ação, leia nesta ordem:
 1. `AGENTS.md`
 2. `AGENT_PROMPT.md`
@@ -54,6 +59,7 @@ Se os previews ainda falharem:
 
 Importante:
 - use `pnpm`
+- nunca use Docker
 - use `supabase` CLI direto, sem Docker
 - confirme sempre o estado real com CLI antes de editar
 - preserve a branch `codex/deploy-hardening`

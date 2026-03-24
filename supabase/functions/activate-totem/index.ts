@@ -6,6 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function isQuestionarioDisponivel(
+  questionario: { data_inicio?: string | null; data_fim?: string | null },
+  referenceDate: Date,
+) {
+  const startsAt = questionario.data_inicio ? new Date(questionario.data_inicio) : null
+  const endsAt = questionario.data_fim ? new Date(questionario.data_fim) : null
+
+  if (startsAt && startsAt > referenceDate) {
+    return false
+  }
+
+  if (endsAt && endsAt < referenceDate) {
+    return false
+  }
+
+  return true
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -75,7 +93,8 @@ serve(async (req) => {
     }
 
     // Ativar a chave
-    const now = new Date().toISOString()
+    const nowDate = new Date()
+    const now = nowDate.toISOString()
     const { error: updateAtivacaoError } = await supabase
       .from('totem_ativacoes')
       .update({ 
@@ -103,16 +122,22 @@ serve(async (req) => {
       .eq('id', totem.id)
 
     // Buscar questionários ativos para este totem
-    const { data: questionarios } = await supabase
+    const { data: questionariosData } = await supabase
       .from('questionarios')
       .select(`
         *,
         questoes (*)
       `)
-      .eq('unidade_id', totem.unidade_id)
       .eq('ativo', true)
-      .or(`data_inicio.is.null,data_inicio.lte.${now}`)
-      .or(`data_fim.is.null,data_fim.gte.${now}`)
+      .or(`unidade_id.eq.${totem.unidade_id},unidade_id.is.null`)
+      .order('nome')
+
+    const questionarios = (questionariosData || [])
+      .filter((questionario) => isQuestionarioDisponivel(questionario, nowDate))
+      .map((questionario) => ({
+        ...questionario,
+        questoes: [...(questionario.questoes || [])].sort((a, b) => a.ordem - b.ordem),
+      }))
 
     return new Response(
       JSON.stringify({
