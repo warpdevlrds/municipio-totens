@@ -82,7 +82,14 @@ serve(async (req) => {
             .insert(respostasToInsert)
 
           if (respostasError) {
+            // Roll back the parent row so the client can retry the whole payload.
+            await supabase
+              .from('avaliacoes')
+              .delete()
+              .eq('id', newAvaliacao.id)
+
             errors.push({ client_id, error: `Erro ao salvar respostas: ${respostasError.message}` })
+            continue
           }
         }
 

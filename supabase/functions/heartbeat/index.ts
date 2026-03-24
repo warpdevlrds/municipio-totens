@@ -28,7 +28,7 @@ serve(async (req) => {
     const now = new Date().toISOString()
 
     // Atualizar totem
-    const { data: totem, error: totemError } = await supabase
+    const { error: updateError } = await supabase
       .from('totens')
       .update({ 
         ultimo_ping: now,
@@ -36,7 +36,18 @@ serve(async (req) => {
         updated_at: now
       })
       .eq('id', totem_id)
-      .select('id, status')
+    
+    if (updateError) {
+      return new Response(
+        JSON.stringify({ error: 'Totem não encontrado' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const { data: totem, error: totemError } = await supabase
+      .from('totens')
+      .select('id, status, unidade_id')
+      .eq('id', totem_id)
       .single()
 
     if (totemError || !totem) {

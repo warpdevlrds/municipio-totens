@@ -1,0 +1,2 @@
+ALTER TABLE respostas
+ALTER COLUMN valor_nota TYPE NUMERIC(4,2);
