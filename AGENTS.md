@@ -7,6 +7,43 @@ Cidadãos avaliam atendimento em quiosques touch-screen. Dados sincronizam quand
 
 **Repo:** https://github.com/warpdevlrds/municipio-totens
 
+## Ambiente de Desenvolvimento Local
+
+Este projeto usa ferramentas CLI para desenvolvimento. Todas as operações devem ser feitas via linha de comando.
+
+### Ferramentas Required
+
+| Ferramenta | Versão | Para que serve |
+|------------|--------|----------------|
+| Node.js | 20+ | Runtime do projeto |
+| pnpm | 10+ | Gerenciador de pacotes (monorepo) |
+| git | qualquer | Versionamento |
+| gh CLI | mais recente | Operações GitHub (issues, PRs, repos) |
+| supabase CLI | mais recente | Operações banco/Edge Functions |
+| vercel CLI | mais recente | Deploy (opcional, CI é preferível) |
+
+### Instalação das Ferramentas
+
+```bash
+# Node.js - via nvm (recomendado)
+nvm install 20
+nvm use 20
+
+# pnpm
+npm install -g pnpm
+
+# GitHub CLI
+# Windows: winget install GitHub.cli
+# ou: https://github.com/cli#installation
+
+# Supabase CLI
+# Windows: npm install -g supabase
+# ou: https://github.com/supabase/cli#installation
+
+# Vercel CLI (opcional)
+npm install -g vercel
+```
+
 ## Stack Tecnológica
 
 ```
@@ -22,46 +59,87 @@ Deploy:   Vercel (apps) + Supabase (functions/DB)
 ```
 municipio-totens/
 ├── apps/
-│   ├── totem-pwa/           # PWA para terminais (PRIORIDADE)
-│   │   ├── src/
-│   │   │   ├── screens/      # Telas da aplicação
-│   │   │   ├── components/   # Componentes
-│   │   │   ├── hooks/       # Custom hooks
-│   │   │   └── App.tsx      # Entry point
-│   │   ├── public/          # Assets estáticos
-│   │   └── vite.config.ts
+│   ├── totem-pwa/           # PWA para terminais
 │   └── admin-web/            # Painel admin
-│       ├── src/
-│       │   ├── pages/        # Páginas admin
-│       │   ├── components/   # Componentes
-│       │   ├── api/          # Chamadas API
-│       │   └── App.tsx
-│       └── public/
 ├── packages/
-│   ├── types/               # Interfaces TypeScript ⭐ USAR SEMPRE
-│   ├── utils/               # Helpers (generateUUID, etc)
-│   ├── ui/                  # Componentes compartilhados (stub)
-│   ├── supabase-client/     # Wrapper Edge Functions ⭐ USAR SEMPRE
+│   ├── types/               # Interfaces TypeScript
+│   ├── utils/               # Helpers
+│   ├── ui/                  # Componentes compartilhados
+│   ├── supabase-client/     # Wrapper Edge Functions
 │   └── offline-sync/        # Dexie storage + sync engine
-└── supabase/
-    ├── migrations/          # SQL migrations
-    └── functions/           # Edge Functions (Deno)
+├── supabase/
+│   ├── migrations/          # SQL migrations
+│   └── functions/           # Edge Functions (Deno)
+└── .github/workflows/       # CI/CD
 ```
 
 ## Comandos Essenciais
 
+### Desenvolvimento Local
+
 ```bash
+# Install dependencies (sempre fazer primeiro)
+pnpm install
+
+# Development
+pnpm dev                        # Todos os apps
+pnpm dev --filter=totem-pwa    # Apenas totem
+pnpm dev --filter=admin-web   # Apenas admin
+
 # Build
 pnpm build                      # Build tudo
 pnpm build --filter=totem-pwa  # Build específico
+pnpm build --filter=admin-web  # Build específico
+```
 
-# Dev
-pnpm dev                        # Todos os apps
-pnpm dev --filter=totem-pwa    # Apenas totem
+### Supabase CLI
 
-# Supabase
-supabase db push                # Push migrations
-supabase functions deploy <nome> # Deploy function específica
+```bash
+# Linkar projeto (obrigatório antes de qualquer comando)
+supabase link --project-ref nyjsclgdhxsqvncnrlxe
+
+# Database
+supabase db push                # Enviar migrations para production
+supabase db reset              # Resetar banco (CUIDADO: apaga dados)
+supabase migration list        # Listar migrations
+
+# Edge Functions
+supabase functions deploy <nome>     # Deploy função específica
+supabase functions list               # Listar funções
+supabase functions log <nome>         # Ver logs
+```
+
+### GitHub CLI
+
+```bash
+# Autenticação (primeira vez)
+gh auth login
+
+# Issues
+gh issue list                          # Listar issues
+gh issue view <numero>                # Ver issue específica
+gh issue create --title "titulo"      # Criar issue
+gh issue close <numero>               # Fechar issue
+
+# Pull Requests
+gh pr list                            # Listar PRs
+gh pr view <numero>                   # Ver PR
+gh pr create                           # Criar PR
+gh pr merge <numero>                  # Mergear PR
+
+# Repositório
+gh repo view                           # Ver repositório atual
+```
+
+### Vercel CLI (opcional - CI é preferível)
+
+```bash
+# Login
+vercel login
+
+# Deploy (não usar para production - usar CI)
+vercel                          # Dev
+vercel --prod                   # Production
 ```
 
 ## Configuração
@@ -69,55 +147,54 @@ supabase functions deploy <nome> # Deploy function específica
 ### Supabase
 - **Project ID:** `nyjsclgdhxsqvncnrlxe`
 - **Region:** São Paulo
-- **Link:** `supabase link --project-ref nyjsclgdhxsqvncnrlxe`
+- **Dashboard:** https://supabase.com/dashboard/project/nyjsclgdhxsqvncnrlxe
+- **API URL:** https://nyjsclgdhxsqvncnrlxe.supabase.co
 
 ### Variáveis de Ambiente
-```env
-# apps/totem-pwa/.env.local
-VITE_SUPABASE_URL=https://nyjsclgdhxsqvncnrlxe.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJ...
 
-# apps/admin-web/.env.local
+Criar `apps/totem-pwa/.env.local` e `apps/admin-web/.env.local`:
+
+```env
 VITE_SUPABASE_URL=https://nyjsclgdhxsqvncnrlxe.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJ...
+VITE_SUPABASE_ANON_KEY=<sua-anon-key-aqui>
 ```
+
+Para obter a anon key:
+1. Acesse https://supabase.com/dashboard/project/nyjsclgdhxsqvncnrlxe/settings/api
+2. Copie a chave "anon public"
 
 ## API - Edge Functions
 
 ### activate-totem
-Ativa totem com chave única. Deve ser chamada uma vez na primeira inicialização.
+Ativa totem com chave única:
 
 ```typescript
 import { activateTotem } from '@municipio-totens/supabase-client'
 
-const result = await activateTotem(
-  'CHAVE-ATIVACAO-123',  // chave_ativacao
-  'totem-001',           // codigo_totem
-  '1.0.0'                // versao_app
-)
-
+const result = await activateTotem('CHAVE-ATIVACAO-123', 'totem-001', '1.0.0')
 // result.success = true/false
-// result.totem_id = 'uuid-do-totem'
+// result.totem_id = 'uuid'
 // result.questionarios = [...]
 ```
 
 ### sync-evaluations
-Sincroniza avaliações pendentes do IndexedDB.
+Sincroniza avaliações pendentes:
 
 ```typescript
 import { syncEvaluations } from '@municipio-totens/supabase-client'
+import { getPendingEvaluations } from '@municipio-totens/offline-sync'
 
-const pending = await getPendingEvaluations() // do offline-sync
+const pending = await getPendingEvaluations()
 const result = await syncEvaluations(totemId, pending)
 ```
 
 ### heartbeat
-Mantém sessão ativa, chamado a cada 30 segundos.
+Mantém sessão ativa (a cada 30s):
 
 ```typescript
 import { heartbeat } from '@municipio-totens/supabase-client'
 
-const result = await heartbeat(totemId, ipAddress)
+await heartbeat(totemId, ipAddress)
 ```
 
 ## Offline Sync - Como Usar
@@ -130,17 +207,8 @@ import {
   cacheQuestionarios 
 } from '@municipio-totens/offline-sync'
 
-// Salvar avaliação offline
-await saveEvaluation(
-  totemId,
-  questionarioId,
-  [{ questao_id: '...', valor_nota: 5 }]
-)
-
-// Buscar pendentes para sync
+await saveEvaluation(totemId, questionarioId, [{ questao_id: '...', valor_nota: 5 }])
 const pending = await getPendingEvaluations()
-
-// Cachear questionários para uso offline
 await cacheQuestionarios(questionarios)
 ```
 
@@ -159,21 +227,19 @@ await cacheQuestionarios(questionarios)
 
 ### UUID
 - Usar `gen_random_uuid()` (não `uuid_generate_v4()`)
-- Tabela totens (singular), não totems
+- Tabela `totens` (singular), não `totems`
 
 ## Padrões de Código
 
-### Imports
+### Imports (sempre usar workspace imports)
 ```typescript
-//Sempre usar workspace imports
 import { Tipo } from '@municipio-totens/types'
 import { helper } from '@municipio-totens/utils'
 import { db } from '@municipio-totens/offline-sync'
 ```
 
-### Tipos
+### Tipos (do package types)
 ```typescript
-// Usar tipos do package types
 import type { Totem, Questionario, Questao, Avaliacao } from '@municipio-totens/types'
 ```
 
@@ -193,26 +259,35 @@ import type { Totem, Questionario, Questao, Avaliacao } from '@municipio-totens/
 
 2. AVALIAÇÃO (loop)
    └─> Mostrar questionário
-       └─> Para cada questão:
-           └─> Renderizar input (nota/escolha/texto)
-       └─> Submit
-           └─> POST saveEvaluation() → IndexedDB
+       └─> Para cada questão: Renderizar input
+       └─> Submit → saveEvaluation() → IndexedDB
 
 3. SYNC
-   └─> Online? 
-       └─> GET getPendingEvaluations()
-       └─> POST /sync-evaluations
-       └─> Marcar como synced
+   └─> Online? → syncEvaluations() → Marcar synced
 
 4. HEARTBEAT (a cada 30s)
-   └─> POST /heartbeat
-   └─> Verificar updates de questionários
+   └─> heartbeat() → Verificar updates
 ```
+
+## CI/CD - GitHub Actions
+
+O projeto usa GitHub Actions para deploy automático:
+
+```yaml
+# .github/workflows/deploy.yml
+# Faz deploy automaticamente no push para main
+```
+
+**Secrets necessários (Settings → Secrets):**
+- `VERCEL_TOKEN` - Token Vercel
+- `VERCEL_ORG_ID` - Organization ID Vercel
+- `VERCEL_PROJECT_ID_TOTEM` - Project ID totem-pwa
+- `VERCEL_PROJECT_ID_ADMIN` - Project ID admin-web
 
 ## Problemas Conhecidos
 
 ### Build
-- "No inputs were found" → Verificar se existe `src/index.ts`
+- "No inputs were found" → Verificar se existe `src/index.ts` no package
 - "Cannot find type definition" → Adicionar `"types": ["vite/client"]` no tsconfig.json
 - Packages precisam de `vite` como devDependency para tipos
 
@@ -220,13 +295,24 @@ import type { Totem, Questionario, Questao, Avaliacao } from '@municipio-totens/
 - Docker é opcional para deploy de functions
 - Migrations via `supabase db push` (não precisa Docker)
 
-## Próximos Passos
+## Como Criar uma Nova Feature
 
-Ver TODO.md para lista completa de tarefas.
+1. **Criar branch:** `git checkout -b feat/nome-da-feature`
+2. **Desenvolver** localmente com `pnpm dev`
+3. **Testar build:** `pnpm build`
+4. **Commitar:** `git add . && git commit -m "feat: description"`
+5. **Enviar:** `git push -u origin feat/nome-da-feature`
+6. **Criar PR:** `gh pr create --title "feat: description" --body "..."`
 
-**Prioridade atual:** Implementar totem-pwa completo
-1. Tela de ativação
-2. Listar questionários
-3. Fazer avaliação
-4. Salvar offline
-5. Sync quando online
+## Como Reportar/Bug
+
+1. Verificar se já existe issue relacionada: `gh issue list`
+2. Criar nova issue: `gh issue create --title "Bug: descrição"`
+3. Incluir passos para reproduzir e ambiente
+
+## Referências
+
+- [Supabase Docs](https://supabase.com/docs)
+- [Vercel Docs](https://vercel.com/docs)
+- [GitHub CLI Docs](https://cli.github.com/manual)
+- [pnpm Workspaces](https://pnpm.io/workspaces)
