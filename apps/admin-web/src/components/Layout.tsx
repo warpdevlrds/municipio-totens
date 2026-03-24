@@ -5,6 +5,7 @@ import {
   Monitor, 
   FileText, 
   ClipboardList,
+  BarChart3,
   Settings
 } from 'lucide-react'
 import './Layout.css'
@@ -15,6 +16,7 @@ const navItems = [
   { to: '/totens', icon: Monitor, label: 'Totens' },
   { to: '/questionarios', icon: FileText, label: 'Questionários' },
   { to: '/avaliacoes', icon: ClipboardList, label: 'Avaliações' },
+  { to: '/relatorios', icon: BarChart3, label: 'Relatórios' },
 ]
 
 export function Layout() {

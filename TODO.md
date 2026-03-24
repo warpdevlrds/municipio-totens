@@ -44,17 +44,17 @@
 - [x] CRUD de questionários
 - [x] CRUD de questões
 - [x] Visualizar avaliações
-- [ ] Filtros e relatórios
+- [x] Filtros e relatórios
 - [ ] Autenticação admin
 
 ### offline-sync (Motor Sync)
 - [x] Implementar SyncManager com retry logic
 - [x] Listener para online/offline events
 - [x] Background sync quando reconnectar
-- [ ] Queue de sincronização
+- [x] Queue de sincronização com backoff exponencial
 
 ### Database
-- [ ] Seed com dados de exemplo
+- [x] Seed com dados de exemplo (unidades, totens, questionarios, avaliacoes)
 - [ ] Migrations para: users, profiles, audit_log
 
 ### Edge Functions

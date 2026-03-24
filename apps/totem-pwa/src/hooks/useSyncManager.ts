@@ -1,7 +1,14 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { heartbeat } from '@municipio-totens/supabase-client'
 import { syncEvaluations } from '@municipio-totens/supabase-client'
-import { getPendingEvaluations, markAsSynced, getSyncStats, type PendingEvaluation } from '@municipio-totens/offline-sync'
+import { 
+  getPendingEvaluations, 
+  markAsSynced, 
+  getSyncStats, 
+  getQueueStats,
+  syncManager,
+  type PendingEvaluation 
+} from '@municipio-totens/offline-sync'
 
 const HEARTBEAT_INTERVAL = 30000
 const SYNC_DEBOUNCE = 5000
@@ -11,6 +18,8 @@ interface SyncState {
   isSyncing: boolean
   lastSyncAt: string | null
   pendingCount: number
+  queuePending: number
+  queueFailed: number
   error: string | null
 }
 
@@ -20,6 +29,8 @@ export function useSyncManager(totemId: string | null) {
     isSyncing: false,
     lastSyncAt: null,
     pendingCount: 0,
+    queuePending: 0,
+    queueFailed: 0,
     error: null
   })
 
@@ -29,7 +40,13 @@ export function useSyncManager(totemId: string | null) {
   const updatePendingCount = useCallback(async () => {
     if (!totemId) return
     const stats = await getSyncStats()
-    setState(prev => ({ ...prev, pendingCount: stats.pending }))
+    const queueStats = await getQueueStats()
+    setState(prev => ({ 
+      ...prev, 
+      pendingCount: stats.pending,
+      queuePending: queueStats.pending,
+      queueFailed: queueStats.failed
+    }))
   }, [totemId])
 
   const performSync = useCallback(async () => {
@@ -106,6 +123,23 @@ export function useSyncManager(totemId: string | null) {
 
     updatePendingCount()
 
+    // Configurar SyncManager com queue
+    syncManager.setTotemId(totemId)
+    syncManager.setSyncFunction(syncEvaluations)
+    syncManager.setStatusCallback((status) => {
+      if (status === 'syncing') {
+        setState(prev => ({ ...prev, isSyncing: true }))
+      } else if (status === 'success') {
+        setState(prev => ({ ...prev, isSyncing: false, lastSyncAt: new Date().toISOString() }))
+        updatePendingCount()
+      } else if (status === 'error') {
+        setState(prev => ({ ...prev, isSyncing: false }))
+      } else {
+        setState(prev => ({ ...prev, isSyncing: false }))
+      }
+    })
+    syncManager.start(SYNC_DEBOUNCE)
+
     const handleOnline = () => {
       setState(prev => ({ ...prev, isOnline: true }))
       scheduleSync()
@@ -124,6 +158,7 @@ export function useSyncManager(totemId: string | null) {
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      syncManager.stop()
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current)
       }

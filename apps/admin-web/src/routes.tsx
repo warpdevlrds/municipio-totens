@@ -6,6 +6,7 @@ import { Totens } from './pages/Totens'
 import { Questionarios } from './pages/Questionarios'
 import { Questoes } from './pages/Questoes'
 import { Avaliacoes } from './pages/Avaliacoes'
+import { Relatorios } from './pages/Relatorios'
 
 export function AppRoutes() {
   return (
@@ -18,6 +19,7 @@ export function AppRoutes() {
           <Route path="questionarios" element={<Questionarios />} />
           <Route path="questionarios/:id/questoes" element={<Questoes />} />
           <Route path="avaliacoes" element={<Avaliacoes />} />
+          <Route path="relatorios" element={<Relatorios />} />
         </Route>
       </Routes>
     </BrowserRouter>
