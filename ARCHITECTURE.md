@@ -1,253 +1,126 @@
-# Arquitetura do Sistema
+# Arquitetura
 
-## Visão Geral
+Documento alinhado ao estado verificado em `2026-03-26`.
+Ele descreve a arquitetura que existe hoje e aponta, sem mascarar, os principais desvios entre o desenho atual e o que seria aceitavel para producao.
 
-Sistema de avaliação cidadã para terminais de quiosque em órgãos públicos municipais. Arquitetura offline-first com sincronização automática.
+## Visao Geral
 
-## Diagrama de Arquitetura
+O sistema possui duas interfaces principais:
+- `totem-pwa`: kiosk PWA executado no dispositivo de atendimento
+- `admin-web`: painel administrativo em navegador
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         SUPABASE CLOUD                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
-│  │  PostgreSQL │  │ Edge Fn     │  │ Auth (future)       │   │
-│  │             │  │             │  │                     │   │
-│  │  - totens   │  │ - activate  │  │                     │   │
-│  │  - avaliac. │  │ - sync      │  │                     │   │
-│  │  - questoes │  │ - heartbeat │  │                     │   │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-           ▲                 ▲                    ▲
-           │                 │                    │
-    ┌──────┴──────┐   ┌─────┴─────┐      ┌─────┴─────┐
-    │  totem-pwa  │   │ admin-web │      │   Vercel  │
-    │  (Kiosk)    │   │  (Admin)  │      │  (Deploy) │
-    └─────────────┘   └───────────┘      └───────────┘
-           │
-    ┌──────┴──────┐
-    │  IndexedDB  │
-    │  (Dexie.js) │
-    └─────────────┘
-```
+O backend esta centralizado no Supabase:
+- PostgreSQL com schema versionado por migrations
+- Edge Functions em Deno
+- Supabase Auth usado apenas parcialmente no admin, sem RBAC robusto
 
-## Componentes
+Os frontends sao servidos pela Vercel e o repositorio principal esta no GitHub.
 
-### Apps
+## Diagrama de Alto Nivel
 
-#### totem-pwa
-PWA para terminais de avaliação (quiosques touch-screen).
-
-**Responsabilidades:**
-- Interface de ativação do totem
-- Renderização de questionários
-- Coleta de respostas
-- Armazenamento offline (IndexedDB)
-- Sincronização automática
-
-**Tecnologias:**
-- React 18
-- TypeScript
-- Vite
-- Dexie.js (IndexedDB)
-
-#### admin-web
-Painel administrativo para gestão do sistema.
-
-**Responsabilidades:**
-- CRUD de unidades
-- CRUD de totens
-- CRUD de questionários
-- Visualização de avaliações
-- Relatórios e estatísticas
-
-### Packages
-
-#### @municipio-totens/types
-Interfaces TypeScript compartilhadas.
-
-```typescript
-// Interfaces principais
-Totem, Questionario, Questao, Avaliacao, Resposta
-TotemStatus, AvaliacaoStatus
+```mermaid
+flowchart LR
+  Citizen["Cidadao no totem"] --> Totem["totem-pwa\nReact + Vite + Dexie"]
+  Operator["Operador admin"] --> Admin["admin-web\nReact + Vite"]
+  Totem --> IndexedDB["IndexedDB\nDexie"]
+  Totem --> Functions["Supabase Edge Functions\nactivate-totem\nsync-evaluations\nheartbeat"]
+  Admin --> SupaRest["Supabase REST API\ncliente anonimo"]
+  Functions --> DB["Supabase Postgres"]
+  SupaRest --> DB
+  GitHub["GitHub repo\nwarpdevlrds/municipio-totens"] --> Actions["GitHub Actions"]
+  Actions --> Vercel["Vercel\nprojects: totem-pwa, admin-web"]
+  Vercel --> Totem
+  Vercel --> Admin
 ```
 
-#### @municipio-totens/utils
-Funções utilitárias.
+## Monorepo
 
-```typescript
-generateUUID()     // Gera UUID v4
-formatDate()       // Formata datas
-generateClientEventId() // Gera ID de evento
-```
+| Caminho | Papel |
+| --- | --- |
+| `apps/totem-pwa` | PWA do kiosk, com ativacao, exibicao de questionarios e coleta offline |
+| `apps/admin-web` | Painel de gestao de unidades, totens, questionarios e relatorios |
+| `packages/types` | Tipos compartilhados |
+| `packages/utils` | Helpers genericos |
+| `packages/supabase-client` | Cliente Supabase e wrappers de Edge Functions |
+| `packages/offline-sync` | Banco local Dexie e fila de sincronizacao |
+| `packages/ui` | Espaco reservado para componentes compartilhados |
+| `supabase/migrations` | Schema e evolucao do banco |
+| `supabase/functions` | Funcoes backend do Supabase |
 
-#### @municipio-totens/supabase-client
-Wrapper para Edge Functions do Supabase.
+## Fluxos Criticos
 
-```typescript
-activateTotem()     // Ativa totem com chave única
-syncEvaluations()   // Sincroniza avaliações pendentes
-heartbeat()         // Mantém sessão ativa
-```
+### 1. Ativacao do Totem
+1. O usuario informa `codigo_totem` e `chave_ativacao`.
+2. `totem-pwa` chama `activate-totem`.
+3. A function valida a chave, marca a ativacao como usada, atualiza o totem para `online` e devolve questionarios ativos.
+4. O frontend persiste `totem_id` e metadados no IndexedDB.
 
-#### @municipio-totens/offline-sync
-Motor de sincronização offline.
+Observacao importante:
+- A function ja devolve `questoes`, mas o hook atual do totem descarta esse payload no cache local e grava `questoes: []`.
 
-```typescript
-db                          // Instância Dexie
-saveEvaluation()           // Salva avaliação offline
-getPendingEvaluations()    // Busca pendentes
-markAsSynced()             // Marca como sincronizado
-cacheQuestionarios()       // Cacheia questionários
-```
+### 2. Coleta de Avaliacoes
+1. O totem busca questionarios do estado em memoria e do storage local.
+2. Cada avaliacao gera um `client_id`, `session_id` e payload de respostas.
+3. Os dados ficam primeiro no IndexedDB via `packages/offline-sync`.
 
-#### @municipio-totens/ui
-Componentes compartilhados (stub).
+### 3. Sincronizacao
+1. O `SyncManager` move avaliacoes pendentes para uma fila Dexie.
+2. Quando online, chama `sync-evaluations`.
+3. A Edge Function grava `avaliacoes`, `respostas` e `sync_log`.
+4. O queue item e marcado como sincronizado quando o `client_id` volta em `synced_ids`.
 
-### Backend (Supabase)
+Observacao importante:
+- A function aceita qualquer `totem_id` informado pelo cliente e usa service role para gravacao.
 
-#### Edge Functions (Deno)
+### 4. Heartbeat
+1. O totem chama `heartbeat` periodicamente.
+2. A function atualiza `totens.ultimo_ping`, mantem `totem_sessoes` e retorna as versoes de questionario.
 
-| Função | Endpoint | Descrição |
-|--------|----------|-----------|
-| activate-totem | `/activate-totem` | Ativação com chave única |
-| sync-evaluations | `/sync-evaluations` | Sincronização de avaliações |
-| heartbeat | `/heartbeat` | Keep-alive |
+Observacao importante:
+- O frontend hoje nao fecha o ciclo de refresh com base nessa resposta.
 
-#### Database Schema
+### 5. Operacao Administrativa
+1. O admin se autentica no Supabase Auth.
+2. O painel usa o cliente Supabase no browser para CRUD direto nas tabelas.
+3. A seguranca depende de policies abertas, nao de backend protegido.
 
-10 tabelas com RLS configurado:
+## Decisoes Arquiteturais Atuais
 
-| Tabela | Descrição |
-|--------|-----------|
-| unidades | Órgãos municipais |
-| totens | Terminais de avaliação |
-| totem_ativacoes | Chaves de ativação |
-| questionarios | Questionários |
-| questoes | Questões |
-| avaliacoes | Avaliações |
-| respostas | Respostas |
-| sync_log | Log de sincronizações |
-| configuracoes | Configurações operacionais |
-| totem_sessoes | Sessões ativas |
+### Acertos
+- Monorepo simples e legivel
+- Separacao razoavel entre apps e packages
+- Backend funcionalmente pequeno e objetivo
+- Persistencia offline centralizada em um package reutilizavel
 
-## Fluxo de Dados
+### Limites
+- O admin nao possui backend proprio; fala com o banco direto
+- Nao existe modelo de papeis formal para administradores
+- Nao existe identidade robusta de dispositivo para totem
+- A estrategia PWA existe, mas nao fecha todo o ciclo offline-first
 
-### Ativação do Totem
+## Dividas Arquiteturais Prioritarias
 
-```
-1. Totem inicia → Tela de ativação
-2. Usuário insere código + chave
-3. POST /activate-totem
-4. Validação no servidor
-5. Sucesso → Salvar totem_id + cachear questionários no IndexedDB
-6. Totem online
-```
+### Seguranca de dados
+- Policies RLS usam `true` em pontos que deveriam ser restritos por papel ou por identidade de dispositivo.
+- A combinacao `cliente anonimo + CRUD direto + policies permissivas` elimina a separacao entre frontend e backend.
 
-### Coleta de Avaliação
+### Confiabilidade offline
+- O cache inicial do totem nao persiste as questoes recebidas.
+- O service worker usa cache generico e nao expõe um fluxo robusto de invalidacao/versionamento.
 
-```
-1. Mostrar questionário cacheado
-2. Usuário responde questões
-3. Submit → saveEvaluation() → IndexedDB
-4. Tela de obrigado
-5. Loop para próxima avaliação
-```
+### Operacao em escala
+- Relatorios sao agregados no browser com consultas amplas.
+- Falta observabilidade de sync queue, totems offline, erros de Edge Functions e drift entre deploy e `main`.
 
-### Sincronização
+## Arquitetura Alvo Recomendada
 
-```
-1. Online detectado (navigator.onLine)
-2. getPendingEvaluations() → IndexedDB
-3. POST /sync-evaluations
-4. Servidor insere avaliações + respostas
-5. markAsSynced() → IndexedDB
-6. Log em sync_log
-```
+1. Mover mutacoes administrativas para Edge Functions ou backend server-side autenticado.
+2. Introduzir RBAC real para administradores e credencial de dispositivo para totens.
+3. Tratar `totem-pwa` como app publica de kiosk, separando claramente preview protegido de runtime publico.
+4. Implementar refresh incremental de questionarios e estrategia de cache versionado.
+5. Empurrar agregacoes pesadas para banco ou backend, nao para o navegador.
 
-### Heartbeat
+## Principio de Leitura
 
-```
-1. Intervalo de 30 segundos
-2. POST /heartbeat com totem_id
-3. Servidor atualiza totem.ultimo_ping
-4. Verificar novos questionários
-5. Response com status e questionários atualizados
-```
-
-## Offline Strategy
-
-### O que funciona offline:
-- Ativação (após primeira vez)
-- Carregamento de questionários cacheados
-- Coleta de avaliações
-- Tela de obrigado
-
-### O que requer online:
-- Ativação inicial
-- Sincronização de avaliações
-- Atualização de questionários
-
-### Dexie.js Schema
-
-```typescript
-// Tabelas no IndexedDB
-avaliacoes      // Avaliações pendentes
-questionarios   // Questionários cacheados
-settings        // Configurações locais
-```
-
-## Segurança
-
-### Row Level Security (RLS)
-
-Políticas configuradas por tabela:
-
-| Tabela | Política |
-|--------|----------|
-| totens | SELECT, UPDATE públicos |
-| unidades | ALL para admin |
-| questionarios | ALL para admin |
-| avaliacoes | INSERT público, ALL para admin |
-| respostas | INSERT público, ALL para admin |
-
-### Autenticação
-
-- Totens: Chave de ativação única (uso único)
-- Admin: Future (não implementado)
-
-## Performance
-
-### Estratégias
-
-1. **Cache agressivo** - Questionários em IndexedDB
-2. **Background sync** - Sincronização não-bloqueante
-3. **Delta sync** - Apenas dados pendentes
-4. **Compression** - Gzip em Edge Functions
-
-### Índices
-
-```sql
-idx_totens_unidade, idx_totens_status, idx_totens_codigo
-idx_questoes_questionario
-idx_avaliacoes_totem, idx_avaliacoes_status, idx_avaliacoes_created
-idx_respostas_avaliacao
-idx_sync_log_totem
-idx_totem_ativacoes_chave
-idx_totem_sessoes_totem
-```
-
-## Escalabilidade
-
-### Limites Conhecidos
-
-| Recurso | Limite |
-|---------|--------|
-| Avaliações/sync | 100 por batch |
-| Tamanho resposta | 1MB |
-| Sessions ativas | Baseado em conexão |
-
-### Mitigações
-
-- Batch processing para sincronização
-- Retry logic com backoff exponencial
-- Queue de sincronização
+Esta arquitetura nao deve ser lida como "design ideal".
+Ela documenta a realidade atual para que qualquer correcao futura parta de fatos verificados, nao de suposicoes.

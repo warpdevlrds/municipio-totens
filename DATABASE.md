@@ -1,337 +1,113 @@
-# Database Schema
+# Database
 
-## Visão Geral
+Schema documentado a partir das migrations versionadas e do estado remoto alinhado em `2026-03-26`.
 
-Banco de dados PostgreSQL no Supabase com Row Level Security (RLS) habilitado.
+## Projeto Supabase
+- Project ref: `nyjsclgdhxsqvncnrlxe`
+- Banco: PostgreSQL gerenciado pelo Supabase
+- Extensao usada: `pgcrypto`
 
-## Diagrama ER
+## Inventario de Migrations
 
-```
-┌──────────────┐       ┌──────────────┐
-│   unidades   │       │   totens    │
-├──────────────┤       ├──────────────┤
-│ id (PK)     │◄──────│ unidade_id  │
-│ nome        │       │ id (PK)     │
-│ municipio   │       │ codigo      │
-│ estado      │       │ status      │
-│ ativo       │       └──────┬───────┘
-└──────────────┘              │
-       │                     │
-       │              ┌──────┴───────┐
-       │              │totem_ativac.│
-       │              ├──────────────┤
-       │              │ totem_id(FK)│
-       │              │ chave_ativ. │
-       │              │ ativo       │
-       │              └─────────────┘
-       │
-       │
-┌──────┴────────┐       ┌────────────────┐
-│ questionarios │       │  totens_sessoes│
-├───────────────┤       ├────────────────┤
-│ id (PK)      │       │ id (PK)        │
-│ unidade_id(FK)│       │ totem_id (FK) │
-│ nome          │       │ ultimo_ping    │
-│ ativo         │       └────────────────┘
-│ versao        │
-└───────┬───────┘
-        │
-        │
-┌───────┴───────┐       ┌────────────────┐
-│   questoes    │       │   avaliacoes   │
-├───────────────┤       ├────────────────┤
-│ id (PK)      │       │ id (PK)        │
-│ questionario │◄──────│ questionario   │
-│ (FK)        │       │ totem_id (FK)  │
-│ texto        │       │ session_id    │
-│ tipo         │       │ status        │
-│ ordem        │       └───────┬────────┘
-│ opcoes       │               │
-└───────────────┘               │
-                               │
-                        ┌──────┴────────┐
-                        │   respostas   │
-                        ├───────────────┤
-                        │ id (PK)      │
-                        │ avaliacao_id │
-                        │ (FK)        │
-                        │ questao_id  │
-                        │ (FK)        │
-                        │ valor_nota  │
-                        │ valor_texto │
-                        └──────────────┘
-                               
-┌────────────────┐
-│   sync_log    │
-├────────────────┤
-│ id (PK)       │
-│ totem_id (FK) │
-│ tipo          │
-│ registros     │
-│ sucesso       │
-│ created_at    │
-└────────────────┘
+| Migration | Objetivo |
+| --- | --- |
+| `20240324000001_initial_schema.sql` | schema base, enums, tabelas, indices e policies iniciais |
+| `20260324050000_add_client_id_to_avaliacoes.sql` | adiciona `avaliacoes.client_id` e indice unico parcial |
+| `20260324064213_remote_schema.sql` | marcador neutro de alinhamento remoto |
+| `20260324081000_expand_respostas_valor_nota.sql` | amplia `valor_nota` para `NUMERIC(4,2)` |
+| `20260324132000_admin_frontend_alignment.sql` | adiciona `totens.last_heartbeat`, `configuracoes` e seeds correspondentes |
+
+## Modelo de Dados
+
+```mermaid
+erDiagram
+  unidades ||--o{ questionarios : possui
+  unidades ||--o{ totens : possui
+  questionarios ||--o{ questoes : contem
+  totens ||--o{ totem_ativacoes : usa
+  totens ||--o{ avaliacoes : recebe
+  questionarios ||--o{ avaliacoes : referencia
+  avaliacoes ||--o{ respostas : possui
+  totens ||--o{ sync_log : gera
+  totens ||--o{ totem_sessoes : mantem
 ```
 
 ## Tabelas
 
-### unidades
+| Tabela | Papel | Campos relevantes | Observacoes |
+| --- | --- | --- | --- |
+| `unidades` | orgaos/locais atendidos | `nome`, `cnpj`, `municipio`, `estado`, `ativo` | base para associacao de totens e questionarios |
+| `questionarios` | formulario por unidade ou global | `unidade_id`, `nome`, `ativo`, `versao`, `data_inicio`, `data_fim` | filtrado por unidade e janela de disponibilidade |
+| `questoes` | itens do questionario | `questionario_id`, `texto`, `tipo`, `obrigatoria`, `ordem`, `opcoes` | `opcoes` fica em JSONB |
+| `totens` | dispositivos fisicos/logicos | `unidade_id`, `codigo`, `status`, `versao_app`, `ultimo_ping` | possui `last_heartbeat` gerado a partir de `ultimo_ping` |
+| `totem_ativacoes` | chave unica de ativacao | `totem_id`, `chave_ativacao`, `ativado_em`, `expira_em`, `ativo` | hoje a chave e exibida no admin |
+| `avaliacoes` | submissao principal do totem | `totem_id`, `questionario_id`, `session_id`, `client_id`, `status`, `ip_address`, `synced_at` | `client_id` evita duplicidade no sync |
+| `respostas` | respostas individuais | `avaliacao_id`, `questao_id`, `valor_texto`, `valor_nota` | `valor_nota` esta em `NUMERIC(4,2)` |
+| `sync_log` | trilha basica de sincronizacao | `totem_id`, `tipo`, `registros`, `sucesso`, `erro_mensagem` | hoje e tecnico, nao substitui auditoria real |
+| `totem_sessoes` | heartbeat/sessao ativa | `totem_id`, `ultimo_ping`, `ip_address` | atualizada pela function `heartbeat` |
+| `configuracoes` | configuracoes globais do admin | `chave`, `valor`, `descricao` | criada para atender o frontend admin atual |
 
-Órgãos municipais que possuem totens.
+## Enums
 
-| Coluna | Tipo | Constraints | Descrição |
-|--------|------|-------------|-----------|
-| id | UUID | PK, DEFAULT gen_random_uuid() | Identificador único |
-| nome | VARCHAR(255) | NOT NULL | Nome da unidade |
-| cnpj | VARCHAR(18) | UNIQUE | CNPJ da unidade |
-| municipio | VARCHAR(255) | NOT NULL | Nome do município |
-| estado | VARCHAR(2) | NOT NULL | Sigla do estado (UF) |
-| ativo | BOOLEAN | DEFAULT true | Se a unidade está ativa |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
-| updated_at | TIMESTAMPTZ | DEFAULT NOW() | Data de atualização |
+| Enum | Valores |
+| --- | --- |
+| `totem_status` | `offline`, `online`, `manutencao`, `inativo` |
+| `avaliacao_status` | `pendente`, `processada`, `erro` |
+| `questao_tipo` | `nota`, `escolha_unica`, `escolha_multipla`, `texto_livre` |
 
-### totens
-
-Terminais de avaliação.
-
-| Coluna | Tipo | Constraints | Descrição |
-|--------|------|-------------|-----------|
-| id | UUID | PK, DEFAULT gen_random_uuid() | Identificador único |
-| unidade_id | UUID | FK → unidades(id) | Unidade associada |
-| codigo | VARCHAR(50) | UNIQUE, NOT NULL | Código do totem |
-| nome | VARCHAR(255) | | Nome descritivo |
-| localizacao | VARCHAR(255) | | Localização física |
-| status | totem_status | DEFAULT 'offline' | Status atual |
-| versao_app | VARCHAR(50) | | Versão do app |
-| ultimo_ping | TIMESTAMPTZ | | Último heartbeat |
-| last_heartbeat | TIMESTAMPTZ | GENERATED ALWAYS AS (ultimo_ping) STORED | Alias de compatibilidade consumido pelo dashboard admin |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
-| updated_at | TIMESTAMPTZ | DEFAULT NOW() | Data de atualização |
-
-**Enum totem_status:** `'offline' | 'online' | 'manutencao' | 'inativo'`
-
-### totem_ativacoes
-
-Chaves de ativação para totens (uso único).
-
-| Coluna | Tipo | Constraints | Descrição |
-|--------|------|-------------|-----------|
-| id | UUID | PK, DEFAULT gen_random_uuid() | Identificador único |
-| totem_id | UUID | FK → totens(id) | Totem associado |
-| chave_ativacao | VARCHAR(100) | UNIQUE, NOT NULL | Chave de ativação |
-| ativado_em | TIMESTAMPTZ | | Data de ativação |
-| expira_em | TIMESTAMPTZ | | Data de expiração |
-| ativo | BOOLEAN | DEFAULT true | Se pode ser usada |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
-
-### questionarios
-
-Questionários de avaliação.
-
-| Coluna | Tipo | Constraints | Descrição |
-|--------|------|-------------|-----------|
-| id | UUID | PK, DEFAULT gen_random_uuid() | Identificador único |
-| unidade_id | UUID | FK → unidades(id) | Unidade associada |
-| nome | VARCHAR(255) | NOT NULL | Nome do questionário |
-| descricao | TEXT | | Descrição |
-| ativo | BOOLEAN | DEFAULT true | Se está ativo |
-| versao | INTEGER | DEFAULT 1 | Versão do questionário |
-| data_inicio | TIMESTAMPTZ | | Início da vigência |
-| data_fim | TIMESTAMPTZ | | Fim da vigência |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
-| updated_at | TIMESTAMPTZ | DEFAULT NOW() | Data de atualização |
-
-### questoes
-
-Questões dos questionários.
-
-| Coluna | Tipo | Constraints | Descrição |
-|--------|------|-------------|-----------|
-| id | UUID | PK, DEFAULT gen_random_uuid() | Identificador único |
-| questionario_id | UUID | FK → questionarios(id) | Questionário pai |
-| texto | TEXT | NOT NULL | Texto da questão |
-| tipo | questao_tipo | NOT NULL | Tipo da questão |
-| obrigatoria | BOOLEAN | DEFAULT false | Se é obrigatória |
-| ordem | INTEGER | NOT NULL | Ordem de exibição |
-| opcoes | JSONB | DEFAULT '[]' | Opções (se aplicável) |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
-
-**Enum questao_tipo:** `'nota' | 'escolha_unica' | 'escolha_multipla' | 'texto_livre'`
-
-### avaliacoes
-
-Avaliações enviadas pelos cidadãos.
-
-| Coluna | Tipo | Constraints | Descrição |
-|--------|------|-------------|-----------|
-| id | UUID | PK, DEFAULT gen_random_uuid() | Identificador único |
-| totem_id | UUID | FK → totens(id) | Totem de origem |
-| questionario_id | UUID | FK → questionarios(id) | Questionário usado |
-| session_id | VARCHAR(100) | | ID da sessão |
-| client_id | VARCHAR(100) | | ID único do cliente |
-| status | avaliacao_status | DEFAULT 'pendente' | Status da avaliação |
-| ip_address | INET | | IP do totem |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
-| synced_at | TIMESTAMPTZ | | Data de sincronização |
-
-**Enum avaliacao_status:** `'pendente' | 'processada' | 'erro'`
-
-### respostas
-
-Respostas individuais de cada avaliação.
-
-| Coluna | Tipo | Constraints | Descrição |
-|--------|------|-------------|-----------|
-| id | UUID | PK, DEFAULT gen_random_uuid() | Identificador único |
-| avaliacao_id | UUID | FK → avaliacoes(id) | Avaliação pai |
-| questao_id | UUID | FK → questoes(id) | Questão respondida |
-| valor_texto | TEXT | | Texto da resposta |
-| valor_nota | DECIMAL(4,2) | | Nota numérica |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
-
-### sync_log
-
-Log de sincronizações para auditoria.
-
-| Coluna | Tipo | Constraints | Descrição |
-|--------|------|-------------|-----------|
-| id | UUID | PK, DEFAULT gen_random_uuid() | Identificador único |
-| totem_id | UUID | FK → totens(id) | Totem que sincronizou |
-| tipo | VARCHAR(50) | NOT NULL | Tipo de sincronização |
-| registros | JSONB | DEFAULT '[]' | Dados sincronizados |
-| sucesso | BOOLEAN | DEFAULT false | Se foi bem sucedida |
-| erro_mensagem | TEXT | | Mensagem de erro |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() | Data do log |
-
-### configuracoes
-
-Configurações operacionais consumidas pelo painel administrativo.
-
-| Coluna | Tipo | Constraints | Descrição |
-|--------|------|-------------|-----------|
-| id | UUID | PK, DEFAULT gen_random_uuid() | Identificador único |
-| chave | TEXT | UNIQUE, NOT NULL | Chave lógica da configuração |
-| valor | TEXT | NOT NULL | Valor serializado da configuração |
-| descricao | TEXT | NOT NULL | Descrição operacional |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
-| updated_at | TIMESTAMPTZ | DEFAULT NOW() | Data de atualização |
-
-### totem_sessoes
-
-Sessões ativas dos totens.
-
-| Coluna | Tipo | Constraints | Descrição |
-|--------|------|-------------|-----------|
-| id | UUID | PK, DEFAULT gen_random_uuid() | Identificador único |
-| totem_id | UUID | FK → totens(id) | Totem da sessão |
-| ultimo_ping | TIMESTAMPTZ | DEFAULT NOW() | Último ping |
-| ip_address | INET | | IP do totem |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() | Data de criação |
-
-## Índices
-
-```sql
--- totens
-CREATE INDEX idx_totens_unidade ON totens(unidade_id);
-CREATE INDEX idx_totens_status ON totens(status);
-CREATE INDEX idx_totens_codigo ON totens(codigo);
-
--- questoes
-CREATE INDEX idx_questoes_questionario ON questoes(questionario_id);
-
--- avaliacoes
-CREATE INDEX idx_avaliacoes_totem ON avaliacoes(totem_id);
-CREATE INDEX idx_avaliacoes_status ON avaliacoes(status);
-CREATE INDEX idx_avaliacoes_created ON avaliacoes(created_at);
-
--- respostas
-CREATE INDEX idx_respostas_avaliacao ON respostas(avaliacao_id);
-
--- sync_log
-CREATE INDEX idx_sync_log_totem ON sync_log(totem_id);
-
--- totem_ativacoes
-CREATE INDEX idx_totem_ativacoes_chave ON totem_ativacoes(chave_ativacao);
-
--- totem_sessoes
-CREATE INDEX idx_totem_sessoes_totem ON totem_sessoes(totem_id);
-```
-
-## Triggers
-
-### update_updated_at_column
-
-Função para atualizar automaticamente `updated_at`:
-
-```sql
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-```
-
-**Tabelas com trigger:**
-- unidades
-- questionarios
-- totens
-- configuracoes
-
-## Row Level Security (RLS)
-
-### Políticas Implementadas
-
-| Tabela | Operação | Política |
-|--------|----------|----------|
-| unidades | ALL | Usar função admin (futuro) |
-| totens | SELECT | Público |
-| totens | UPDATE | Público |
-| totem_ativacoes | SELECT | Público |
-| totem_ativacoes | UPDATE | Público |
-| questionarios | ALL | Admin (futuro) |
-| questoes | ALL | Admin (futuro) |
-| avaliacoes | INSERT | Público (totens) |
-| avaliacoes | ALL | Admin (futuro) |
-| respostas | INSERT | Público (totens) |
-| respostas | ALL | Admin (futuro) |
-| sync_log | INSERT | Público |
-| sync_log | ALL | Admin (futuro) |
-| configuracoes | ALL | Admin (futuro) |
-| totem_sessoes | INSERT | Público |
-| totem_sessoes | UPDATE | Público |
-
-### Considerações
-
-1. **Totens**: Leitura e atualização públicas para permitir ativação
-2. **Avaliações/Respostas**: Insert público para permitir submissão offline
-3. **Admin**: Policies futuras com autenticação
-
-## Migrations
-
-### Migrate Up
-
-```bash
-supabase db push
-```
-
-### Criar Nova Migration
-
-```bash
-supabase migration new <nome>
-```
-
-### Ver Status
-
-```bash
-supabase migration list
-```
+## Indices Importantes
+- `idx_totens_codigo`
+- `idx_totens_status`
+- `idx_questoes_questionario`
+- `idx_avaliacoes_totem`
+- `idx_avaliacoes_created`
+- `idx_avaliacoes_client_id_unique` (parcial)
+- `idx_respostas_avaliacao`
+- `idx_totem_ativacoes_chave`
+- `idx_totem_sessoes_totem`
 
 ## Seeds
 
-Arquivo em `supabase/seed.sql` para dados iniciais de desenvolvimento.
+O repositorio possui `supabase/seed.sql` com:
+- 2 unidades de exemplo
+- 2 questionarios
+- 6 questoes
+- 3 totens
+- 3 chaves de ativacao
+- configuracoes basicas
+- avaliacoes e respostas de exemplo
 
-```bash
-supabase db reset  # Recria DB + executa seeds
-```
+Use os seeds apenas como dados de desenvolvimento ou homologacao controlada.
+
+## RLS - Estado Atual
+
+O banco tem RLS habilitado, mas a seguranca atual e fraca porque varias policies sao universalmente permissivas.
+
+| Objeto | Estado atual | Risco |
+| --- | --- | --- |
+| `totens` | `SELECT` e `UPDATE` com `USING (true)` | qualquer cliente com anon key pode ler e atualizar totems |
+| `unidades` | `FOR ALL USING (true)` | CRUD administrativo efetivamente publico |
+| `questionarios` | `FOR ALL USING (true)` | CRUD administrativo efetivamente publico |
+| `questoes` | `FOR ALL USING (true)` | CRUD administrativo efetivamente publico |
+| `totem_ativacoes` | `SELECT` e `UPDATE` com `true` | permite leitura e consumo indevido de chaves |
+| `avaliacoes` | `INSERT WITH CHECK (true)` e `FOR ALL USING (true)` | falsificacao e manipulacao de dados |
+| `respostas` | `INSERT WITH CHECK (true)` e `FOR ALL USING (true)` | mesmo problema das avaliacoes |
+| `sync_log` | `INSERT` e `FOR ALL` com `true` | registros tecnicos podem ser manipulados |
+| `totem_sessoes` | `INSERT` e `UPDATE` com `true` | heartbeat sem prova forte de identidade |
+| `configuracoes` | `FOR ALL USING (true)` | qualquer cliente autenticado na camada atual consegue alterar configuracoes |
+
+## O Que Falta no Modelo de Dados
+- tabela de papeis/perfis administrativos
+- auditoria de operacoes sensiveis
+- credenciais ou identidade de dispositivo por totem
+- trilha de revogacao/rotacao de chaves
+- agregacoes materializadas para relatorios
+
+## Recomendacao Estrutural
+
+1. Criar RBAC formal para administradores.
+2. Separar acesso de leitura publica do totem de mutacoes administrativas.
+3. Remover policies `true` e migrar operacoes sensiveis para backend autenticado.
+4. Adicionar entidades para auditoria, identidade de dispositivo e operacao.
+
+Sem essas mudancas, o schema continua funcional, mas nao atende o nivel de seguranca esperado para producao.
