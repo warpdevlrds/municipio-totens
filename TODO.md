@@ -3,8 +3,8 @@
 Backlog tecnico priorizado a partir do estado verificado em `2026-03-26`.
 
 ## P0 - Bloqueadores
-- [ ] Fechar as policies RLS permissivas e retirar CRUD administrativo do cliente anonimo.
-- [ ] Introduzir autenticacao forte para dispositivos nas funcoes `sync-evaluations` e `heartbeat`.
+- [x] Fechar as policies RLS permissivas e retirar CRUD administrativo do cliente anonimo.
+- [x] Introduzir autenticacao forte para dispositivos nas funcoes `sync-evaluations` e `heartbeat`.
 - [ ] Tornar o deploy do `totem-pwa` publicamente acessivel sem redirecionamento para `vercel.com/login`.
 - [ ] Resolver o billing lock que impede a execucao do workflow `.github/workflows/deploy.yml`.
 - [ ] Proteger a branch `main` com revisao obrigatoria e checks minimos.

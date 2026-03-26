@@ -47,7 +47,8 @@ Response de sucesso:
   "totem_codigo": "TOTEM-001",
   "unidade_id": "uuid",
   "questionarios": [],
-  "ativado_em": "2026-03-26T12:00:00.000Z"
+  "ativado_em": "2026-03-26T12:00:00.000Z",
+  "device_token": "token-dispositivo"
 }
 ```
 
@@ -57,7 +58,6 @@ Comportamento atual:
 - retorna questionarios com `questoes` ordenadas
 
 Limitacoes atuais:
-- nao emite credencial duravel de dispositivo
 - depende de chave de uso unico exibida/gerada a partir do admin atual
 
 ### `sync-evaluations`
@@ -88,6 +88,12 @@ Request:
 }
 ```
 
+Header obrigatorio:
+
+```text
+x-totem-token: <device_token>
+```
+
 Response de sucesso:
 
 ```json
@@ -107,8 +113,7 @@ Comportamento atual:
 - remove a avaliacao pai se a insercao de respostas falhar
 
 Limitacoes atuais:
-- aceita qualquer `totem_id` informado pelo cliente
-- nao faz autenticacao forte do dispositivo
+- rejeita request sem `x-totem-token` valido para o `totem_id`
 - nao possui rate limit ou assinatura de payload
 
 ### `heartbeat`
@@ -125,6 +130,12 @@ Request:
   "totem_id": "uuid",
   "ip_address": "127.0.0.1"
 }
+```
+
+Header obrigatorio:
+
+```text
+x-totem-token: <device_token>
 ```
 
 Response de sucesso:
@@ -150,7 +161,6 @@ Comportamento atual:
 - devolve lista de questionarios ativos e disponiveis por unidade
 
 Limitacoes atuais:
-- o backend nao valida identidade do totem alem do `totem_id`
 - o frontend atual nao conclui o refresh de questionario a partir da resposta
 
 ## Cliente Compartilhado
@@ -186,7 +196,8 @@ O totem depende de:
 
 O admin depende de:
 - Supabase Auth para sessao basica
-- acesso direto ao Postgres via API REST do Supabase
+- whitelist em `admin_users` para autorizacao administrativa
+- acesso ao Postgres sob RLS restrito por `is_admin_user()`
 
 ## O Que Precisa Mudar
 

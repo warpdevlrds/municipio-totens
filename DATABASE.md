@@ -16,6 +16,7 @@ Schema documentado a partir das migrations versionadas e do estado remoto alinha
 | `20260324064213_remote_schema.sql` | marcador neutro de alinhamento remoto |
 | `20260324081000_expand_respostas_valor_nota.sql` | amplia `valor_nota` para `NUMERIC(4,2)` |
 | `20260324132000_admin_frontend_alignment.sql` | adiciona `totens.last_heartbeat`, `configuracoes` e seeds correspondentes |
+| `20260326042103_p0_security_hardening.sql` | adiciona `admin_users`, `is_admin_user()`, token de dispositivo e substitui policies permissivas |
 
 ## Modelo de Dados
 
@@ -39,13 +40,14 @@ erDiagram
 | `unidades` | orgaos/locais atendidos | `nome`, `cnpj`, `municipio`, `estado`, `ativo` | base para associacao de totens e questionarios |
 | `questionarios` | formulario por unidade ou global | `unidade_id`, `nome`, `ativo`, `versao`, `data_inicio`, `data_fim` | filtrado por unidade e janela de disponibilidade |
 | `questoes` | itens do questionario | `questionario_id`, `texto`, `tipo`, `obrigatoria`, `ordem`, `opcoes` | `opcoes` fica em JSONB |
-| `totens` | dispositivos fisicos/logicos | `unidade_id`, `codigo`, `status`, `versao_app`, `ultimo_ping` | possui `last_heartbeat` gerado a partir de `ultimo_ping` |
+| `totens` | dispositivos fisicos/logicos | `unidade_id`, `codigo`, `status`, `versao_app`, `ultimo_ping`, `device_token_hash` | possui `last_heartbeat` gerado a partir de `ultimo_ping` |
 | `totem_ativacoes` | chave unica de ativacao | `totem_id`, `chave_ativacao`, `ativado_em`, `expira_em`, `ativo` | hoje a chave e exibida no admin |
 | `avaliacoes` | submissao principal do totem | `totem_id`, `questionario_id`, `session_id`, `client_id`, `status`, `ip_address`, `synced_at` | `client_id` evita duplicidade no sync |
 | `respostas` | respostas individuais | `avaliacao_id`, `questao_id`, `valor_texto`, `valor_nota` | `valor_nota` esta em `NUMERIC(4,2)` |
 | `sync_log` | trilha basica de sincronizacao | `totem_id`, `tipo`, `registros`, `sucesso`, `erro_mensagem` | hoje e tecnico, nao substitui auditoria real |
 | `totem_sessoes` | heartbeat/sessao ativa | `totem_id`, `ultimo_ping`, `ip_address` | atualizada pela function `heartbeat` |
 | `configuracoes` | configuracoes globais do admin | `chave`, `valor`, `descricao` | criada para atender o frontend admin atual |
+| `admin_users` | lista de usuarios administrativos autorizados | `user_id`, `email`, `display_name`, `ativo` | usada por `is_admin_user()` para RLS |
 
 ## Enums
 
@@ -81,25 +83,25 @@ Use os seeds apenas como dados de desenvolvimento ou homologacao controlada.
 
 ## RLS - Estado Atual
 
-O banco tem RLS habilitado, mas a seguranca atual e fraca porque varias policies sao universalmente permissivas.
+O banco tem RLS habilitado com endurecimento P0 aplicado.
+As policies abertas iniciais foram removidas e as tabelas administrativas agora usam `public.is_admin_user()` como gate de acesso.
 
 | Objeto | Estado atual | Risco |
 | --- | --- | --- |
-| `totens` | `SELECT` e `UPDATE` com `USING (true)` | qualquer cliente com anon key pode ler e atualizar totems |
-| `unidades` | `FOR ALL USING (true)` | CRUD administrativo efetivamente publico |
-| `questionarios` | `FOR ALL USING (true)` | CRUD administrativo efetivamente publico |
-| `questoes` | `FOR ALL USING (true)` | CRUD administrativo efetivamente publico |
-| `totem_ativacoes` | `SELECT` e `UPDATE` com `true` | permite leitura e consumo indevido de chaves |
-| `avaliacoes` | `INSERT WITH CHECK (true)` e `FOR ALL USING (true)` | falsificacao e manipulacao de dados |
-| `respostas` | `INSERT WITH CHECK (true)` e `FOR ALL USING (true)` | mesmo problema das avaliacoes |
-| `sync_log` | `INSERT` e `FOR ALL` com `true` | registros tecnicos podem ser manipulados |
-| `totem_sessoes` | `INSERT` e `UPDATE` com `true` | heartbeat sem prova forte de identidade |
-| `configuracoes` | `FOR ALL USING (true)` | qualquer cliente autenticado na camada atual consegue alterar configuracoes |
+| `unidades` | `FOR ALL` com `is_admin_user()` | leitura anonima retorna vazio; mutacao anonima bloqueada |
+| `questionarios` | `FOR ALL` com `is_admin_user()` | requer membership em `admin_users` |
+| `questoes` | `FOR ALL` com `is_admin_user()` | requer membership em `admin_users` |
+| `totens` | `FOR ALL` com `is_admin_user()` | mutacoes sensiveis saem do alcance anonimo |
+| `totem_ativacoes` | `FOR ALL` com `is_admin_user()` | geracao/leitura de chaves restrita |
+| `avaliacoes` | `FOR ALL` com `is_admin_user()` | insercoes diretas anonimas bloqueadas; ingestao via functions com service role |
+| `respostas` | `FOR ALL` com `is_admin_user()` | insercoes diretas anonimas bloqueadas |
+| `sync_log` | `FOR ALL` com `is_admin_user()` | escrita direta anonima bloqueada |
+| `totem_sessoes` | `FOR ALL` com `is_admin_user()` | escrita anonima bloqueada; atualizacao via function autenticada por token de dispositivo |
+| `configuracoes` | `FOR ALL` com `is_admin_user()` | configuracao restrita a admin autorizado |
+| `admin_users` | `SELECT` self-only | cada usuario enxerga apenas o proprio registro |
 
 ## O Que Falta no Modelo de Dados
-- tabela de papeis/perfis administrativos
-- auditoria de operacoes sensiveis
-- credenciais ou identidade de dispositivo por totem
+- trilha de auditoria de operacoes sensiveis
 - trilha de revogacao/rotacao de chaves
 - agregacoes materializadas para relatorios
 

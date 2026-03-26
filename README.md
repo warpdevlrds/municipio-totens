@@ -9,6 +9,7 @@ Estado verificado em `2026-03-26`: o projeto esta funcional para desenvolvimento
 - Monorepo com `pnpm workspaces` e `turbo`, builds locais funcionando com `pnpm build`
 - Supabase remoto linkado no projeto `nyjsclgdhxsqvncnrlxe`, com migrations locais e remotas alinhadas
 - Edge Functions ativas: `activate-totem`, `sync-evaluations`, `heartbeat`
+- P0 de seguranca aplicado: RLS administrativo por `admin_users` e token de dispositivo no fluxo do totem
 - Dois projetos Vercel configurados: `totem-pwa` e `admin-web`
 - Workflow de deploy no GitHub existe, mas os runs recentes falham por billing lock
 - Deploys atuais observados na Vercel redirecionam para login, o que impede uso publico do totem
@@ -92,11 +93,10 @@ supabase/
 ```
 
 ## Principais Riscos Atuais
-- RLS muito permissivo e CRUD administrativo direto do browser
-- Falta de autenticacao forte para dispositivos de totem
 - Estrategia offline incompleta: questoes nao ficam devidamente cacheadas
 - Ausencia de testes automatizados relevantes
 - Falta de branch protection, governanca e CI/CD confiavel
+- Operacao de deploy ainda depende de estabilizacao do GitHub Actions (billing lock)
 
 ## Documentacao Legada
 

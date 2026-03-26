@@ -70,14 +70,14 @@ Observacao importante:
 4. O queue item e marcado como sincronizado quando o `client_id` volta em `synced_ids`.
 
 Observacao importante:
-- A function aceita qualquer `totem_id` informado pelo cliente e usa service role para gravacao.
+- A function exige `x-totem-token` valido para o `totem_id` e so depois grava com service role.
 
 ### 4. Heartbeat
 1. O totem chama `heartbeat` periodicamente.
 2. A function atualiza `totens.ultimo_ping`, mantem `totem_sessoes` e retorna as versoes de questionario.
 
 Observacao importante:
-- O frontend hoje nao fecha o ciclo de refresh com base nessa resposta.
+- A function exige `x-totem-token` valido para o `totem_id`.
 
 ### 5. Operacao Administrativa
 1. O admin se autentica no Supabase Auth.
@@ -95,14 +95,13 @@ Observacao importante:
 ### Limites
 - O admin nao possui backend proprio; fala com o banco direto
 - Nao existe modelo de papeis formal para administradores
-- Nao existe identidade robusta de dispositivo para totem
 - A estrategia PWA existe, mas nao fecha todo o ciclo offline-first
 
 ## Dividas Arquiteturais Prioritarias
 
 ### Seguranca de dados
-- Policies RLS usam `true` em pontos que deveriam ser restritos por papel ou por identidade de dispositivo.
-- A combinacao `cliente anonimo + CRUD direto + policies permissivas` elimina a separacao entre frontend e backend.
+- O endurecimento P0 removeu policies permissivas e passou a usar `admin_users` + `is_admin_user()` para acesso administrativo.
+- O fluxo do totem ganhou credencial de dispositivo emitida no `activate-totem` e validada em `sync-evaluations` e `heartbeat`.
 
 ### Confiabilidade offline
 - O cache inicial do totem nao persiste as questoes recebidas.

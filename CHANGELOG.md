@@ -10,6 +10,10 @@ Os registros abaixo descrevem marcos relevantes verificados no codigo e na infra
 - `README.md` recriado como ponto de entrada canonico do projeto.
 - `ROADMAP.md` e `TODO.md` alinhados ao backlog tecnico real identificado na auditoria.
 - `FAQ.md`, `GLOSSARY.md` e `SUPPORT.md` movidos para `docs/archive/2026-03-26-legacy/`.
+- Hardening P0 aplicado com migration `20260326042103_p0_security_hardening`.
+- Tabela `admin_users` adicionada e policies administrativas migradas para `is_admin_user()`.
+- `activate-totem` passou a emitir `device_token` por dispositivo.
+- `sync-evaluations` e `heartbeat` passaram a exigir header `x-totem-token`.
 
 ### Verified - 2026-03-26
 - Repositorio remoto: `warpdevlrds/municipio-totens`
