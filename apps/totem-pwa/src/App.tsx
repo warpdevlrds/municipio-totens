@@ -17,6 +17,7 @@ export default function App() {
   const {
     totemId,
     totemCode,
+    deviceToken,
     isActivated,
     isActivating,
     error,
@@ -27,7 +28,7 @@ export default function App() {
   const {
     isOnline,
     pendingCount
-  } = useSyncManager(isActivated ? totemId : null)
+  } = useSyncManager(isActivated ? totemId : null, isActivated ? deviceToken : null)
 
   useEffect(() => {
     if (isActivated) {

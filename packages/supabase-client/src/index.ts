@@ -21,6 +21,7 @@ export interface TotemActivationResponse {
   unidade_id: string
   questionarios: any[]
   ativado_em: string
+  device_token: string
   error?: string
 }
 
@@ -49,7 +50,7 @@ export async function activateTotem(
   })
 
   if (error) {
-    return { success: false, totem_id: '', totem_codigo: '', unidade_id: '', questionarios: [], ativado_em: '', error: error.message }
+    return { success: false, totem_id: '', totem_codigo: '', unidade_id: '', questionarios: [], ativado_em: '', device_token: '', error: error.message }
   }
 
   return data as TotemActivationResponse
@@ -57,9 +58,17 @@ export async function activateTotem(
 
 export async function syncEvaluations(
   totemId: string,
-  avaliacoes: any[]
+  avaliacoes: any[],
+  deviceToken: string
 ): Promise<SyncResponse> {
+  if (!deviceToken) {
+    return { success: false, synced: 0, errors: avaliacoes.length, synced_ids: [], error_details: [{ client_id: '', error: 'Token do dispositivo ausente' }] }
+  }
+
   const { data, error } = await supabase.functions.invoke('sync-evaluations', {
+    headers: {
+      'x-totem-token': deviceToken,
+    },
     body: { totem_id: totemId, avaliacoes }
   })
 
@@ -72,9 +81,17 @@ export async function syncEvaluations(
 
 export async function heartbeat(
   totemId: string,
-  ipAddress?: string
+  ipAddress?: string,
+  deviceToken?: string
 ): Promise<HeartbeatResponse> {
+  if (!deviceToken) {
+    return { success: false, timestamp: '', totem_status: '', questionarios: [] }
+  }
+
   const { data, error } = await supabase.functions.invoke('heartbeat', {
+    headers: {
+      'x-totem-token': deviceToken,
+    },
     body: { totem_id: totemId, ip_address: ipAddress }
   })
 

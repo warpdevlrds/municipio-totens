@@ -3,7 +3,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-totem-token',
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const payload = new TextEncoder().encode(input)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', payload)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')
 }
 
 serve(async (req) => {
@@ -13,6 +21,7 @@ serve(async (req) => {
 
   try {
     const { totem_id, avaliacoes } = await req.json()
+    const deviceToken = req.headers.get('x-totem-token')
 
     if (!totem_id || !avaliacoes || !Array.isArray(avaliacoes)) {
       return new Response(
@@ -21,9 +30,30 @@ serve(async (req) => {
       )
     }
 
+    if (!deviceToken) {
+      return new Response(
+        JSON.stringify({ error: 'x-totem-token é obrigatório' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    const { data: totem } = await supabase
+      .from('totens')
+      .select('id, device_token_hash')
+      .eq('id', totem_id)
+      .single()
+
+    const incomingHash = await sha256Hex(deviceToken)
+    if (!totem?.device_token_hash || totem.device_token_hash !== incomingHash) {
+      return new Response(
+        JSON.stringify({ error: 'Token de dispositivo inválido' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     const now = new Date().toISOString()
     const syncedIds: string[] = []

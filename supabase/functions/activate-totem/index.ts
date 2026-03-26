@@ -3,7 +3,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-totem-token',
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const payload = new TextEncoder().encode(input)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', payload)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+function generateDeviceToken(): string {
+  return `${crypto.randomUUID()}${crypto.randomUUID()}`
 }
 
 function isQuestionarioDisponivel(
@@ -110,6 +122,9 @@ serve(async (req) => {
       )
     }
 
+    const deviceToken = generateDeviceToken()
+    const deviceTokenHash = await sha256Hex(deviceToken)
+
     // Atualizar totem para online
     await supabase
       .from('totens')
@@ -117,7 +132,9 @@ serve(async (req) => {
         status: 'online',
         versao_app,
         ultimo_ping: now,
-        updated_at: now
+        updated_at: now,
+        device_token_hash: deviceTokenHash,
+        device_token_rotated_at: now
       })
       .eq('id', totem.id)
 
@@ -146,7 +163,8 @@ serve(async (req) => {
         totem_codigo: totem.codigo,
         unidade_id: totem.unidade_id,
         questionarios: questionarios || [],
-        ativado_em: now
+        ativado_em: now,
+        device_token: deviceToken
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

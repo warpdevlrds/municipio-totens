@@ -6,6 +6,7 @@ import {
   markAsSynced, 
   getSyncStats, 
   getQueueStats,
+  getSetting,
   syncManager,
   type PendingEvaluation 
 } from '@municipio-totens/offline-sync'
@@ -23,7 +24,7 @@ interface SyncState {
   error: string | null
 }
 
-export function useSyncManager(totemId: string | null) {
+export function useSyncManager(totemId: string | null, deviceToken: string | null) {
   const [state, setState] = useState<SyncState>({
     isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
     isSyncing: false,
@@ -70,7 +71,8 @@ export function useSyncManager(totemId: string | null) {
           questionario_id: p.questionario_id,
           respostas: p.respostas,
           created_at: p.created_at
-        }))
+        })),
+        deviceToken || ''
       )
 
       if (result.success) {
@@ -112,11 +114,11 @@ export function useSyncManager(totemId: string | null) {
     try {
       const ipResponse = await fetch('https://api.ipify.org?format=json')
       const { ip } = await ipResponse.json()
-      await heartbeat(totemId, ip)
+      await heartbeat(totemId, ip, deviceToken || '')
     } catch {
-      await heartbeat(totemId)
+      await heartbeat(totemId, undefined, deviceToken || '')
     }
-  }, [totemId])
+  }, [totemId, deviceToken])
 
   useEffect(() => {
     if (!totemId) return
@@ -125,7 +127,10 @@ export function useSyncManager(totemId: string | null) {
 
     // Configurar SyncManager com queue
     syncManager.setTotemId(totemId)
-    syncManager.setSyncFunction(syncEvaluations)
+    syncManager.setSyncFunction(async (managerTotemId, avaliacoes) => {
+      const runtimeToken = deviceToken || await getSetting<string>('device_token') || ''
+      return syncEvaluations(managerTotemId, avaliacoes, runtimeToken)
+    })
     syncManager.setStatusCallback((status) => {
       if (status === 'syncing') {
         setState(prev => ({ ...prev, isSyncing: true }))
@@ -166,7 +171,7 @@ export function useSyncManager(totemId: string | null) {
         clearTimeout(syncTimeoutRef.current)
       }
     }
-  }, [totemId, performHeartbeat, scheduleSync, updatePendingCount])
+  }, [totemId, deviceToken, performHeartbeat, scheduleSync, updatePendingCount])
 
   return {
     ...state,

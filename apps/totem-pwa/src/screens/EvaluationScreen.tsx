@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { Questionario, Questao } from '@municipio-totens/types'
 import { saveEvaluation, getSetting, getCachedQuestionarios } from '@municipio-totens/offline-sync'
-import { supabase } from '@municipio-totens/supabase-client'
 
 interface Props {
   questionario: Questionario
@@ -35,16 +34,7 @@ export function EvaluationScreen({ questionario, onComplete, onBack }: Props) {
         setQuestoes(cachedQ.questoes)
         return
       }
-
-      const { data } = await supabase
-        .from('questoes')
-        .select('*')
-        .eq('questionario_id', questionario.id)
-        .order('ordem')
-
-      if (data) {
-        setQuestoes(data)
-      }
+      setError('Questoes indisponiveis no cache local. Reative o totem para atualizar o questionario.')
     } catch (err) {
       console.error('Erro ao carregar questões:', err)
     }

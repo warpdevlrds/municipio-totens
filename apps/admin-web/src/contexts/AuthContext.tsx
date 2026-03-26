@@ -6,6 +6,7 @@ interface AuthContextType {
   user: User | null
   session: Session | null
   loading: boolean
+  isAdmin: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   isAuthenticated: boolean
@@ -16,20 +17,69 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  const verifyAdminUser = async (userId: string): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from('admin_users')
+      .select('user_id')
+      .eq('user_id', userId)
+      .single()
+
+    return !error && !!data
+  }
 
   useEffect(() => {
     // Verificar sessão existente
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session?.user) {
+        setSession(null)
+        setUser(null)
+        setIsAdmin(false)
+        setLoading(false)
+        return
+      }
+
+      const canAccess = await verifyAdminUser(session.user.id)
+      if (!canAccess) {
+        await supabase.auth.signOut()
+        setSession(null)
+        setUser(null)
+        setIsAdmin(false)
+        setLoading(false)
+        return
+      }
+
       setSession(session)
-      setUser(session?.user ?? null)
+      setUser(session.user)
+      setIsAdmin(true)
       setLoading(false)
     })
 
     // Escutar mudanças de auth
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!session?.user) {
+        setSession(null)
+        setUser(null)
+        setIsAdmin(false)
+        setLoading(false)
+        return
+      }
+
+      const canAccess = await verifyAdminUser(session.user.id)
+      if (!canAccess) {
+        await supabase.auth.signOut()
+        setSession(null)
+        setUser(null)
+        setIsAdmin(false)
+        setLoading(false)
+        return
+      }
+
       setSession(session)
-      setUser(session?.user ?? null)
+      setUser(session.user)
+      setIsAdmin(true)
       setLoading(false)
     })
 
@@ -50,8 +100,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: error.message }
       }
 
+      if (!data.user || !data.session) {
+        return { error: 'Sessao invalida' }
+      }
+
+      const canAccess = await verifyAdminUser(data.user.id)
+      if (!canAccess) {
+        await supabase.auth.signOut()
+        setSession(null)
+        setUser(null)
+        setIsAdmin(false)
+        return { error: 'Usuario sem permissao administrativa' }
+      }
+
       setSession(data.session)
       setUser(data.user)
+      setIsAdmin(true)
       return { error: null }
     } catch (err) {
       return { error: 'Erro ao conectar. Tente novamente.' }
@@ -62,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
     setSession(null)
     setUser(null)
+    setIsAdmin(false)
   }
 
   return (
@@ -69,9 +134,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       session,
       loading,
+      isAdmin,
       signIn,
       signOut,
-      isAuthenticated: !!session
+      isAuthenticated: !!session && isAdmin
     }}>
       {children}
     </AuthContext.Provider>

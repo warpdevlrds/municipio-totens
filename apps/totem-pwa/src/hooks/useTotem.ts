@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
 import { activateTotem, type TotemActivationResponse } from '@municipio-totens/supabase-client'
 import { setSetting, getSetting, cacheQuestionarios, type CachedQuestionario } from '@municipio-totens/offline-sync'
-import type { Questionario } from '@municipio-totens/types'
+import type { Questionario, Questao } from '@municipio-totens/types'
 
 const APP_VERSION = '1.0.0'
+type QuestionarioAtivacao = Questionario & { questoes?: Questao[] }
 
 export interface TotemState {
   totemId: string | null
   totemCode: string | null
   unidadeId: string | null
+  deviceToken: string | null
   isActivated: boolean
   isActivating: boolean
   error: string | null
@@ -20,6 +22,7 @@ export function useTotem() {
     totemId: null,
     totemCode: null,
     unidadeId: null,
+    deviceToken: null,
     isActivated: false,
     isActivating: false,
     error: null,
@@ -34,6 +37,7 @@ export function useTotem() {
     const storedTotemId = await getSetting<string>('totem_id')
     const storedTotemCode = await getSetting<string>('totem_code')
     const storedUnidadeId = await getSetting<string>('unidade_id')
+    const storedDeviceToken = await getSetting<string>('device_token')
     const cachedQuestionarios = await getSetting<CachedQuestionario[]>('questionarios')
 
     if (storedTotemId) {
@@ -42,6 +46,7 @@ export function useTotem() {
         totemId: storedTotemId,
         totemCode: storedTotemCode || null,
         unidadeId: storedUnidadeId || null,
+        deviceToken: storedDeviceToken || null,
         isActivated: true,
         questionarios: cachedQuestionarios || []
       }))
@@ -63,16 +68,17 @@ export function useTotem() {
         return false
       }
 
-      const questionarios = result.questionarios as Questionario[]
+      const questionarios = result.questionarios as QuestionarioAtivacao[]
 
       await setSetting('totem_id', result.totem_id)
       await setSetting('totem_code', result.totem_codigo)
       await setSetting('unidade_id', result.unidade_id)
       await setSetting('ativado_em', result.ativado_em)
+      await setSetting('device_token', result.device_token)
 
       const toCache: CachedQuestionario[] = questionarios.map(q => ({
         ...q,
-        questoes: [],
+        questoes: q.questoes || [],
         cached_at: new Date().toISOString()
       }))
       await cacheQuestionarios(toCache)
@@ -82,6 +88,7 @@ export function useTotem() {
         totemId: result.totem_id,
         totemCode: result.totem_codigo,
         unidadeId: result.unidade_id,
+        deviceToken: result.device_token,
         isActivated: true,
         isActivating: false,
         error: null,
@@ -105,12 +112,14 @@ export function useTotem() {
     await setSetting('totem_code', '')
     await setSetting('unidade_id', '')
     await setSetting('ativado_em', '')
+    await setSetting('device_token', '')
     await setSetting('questionarios', [])
 
     setState({
       totemId: null,
       totemCode: null,
       unidadeId: null,
+      deviceToken: null,
       isActivated: false,
       isActivating: false,
       error: null,
