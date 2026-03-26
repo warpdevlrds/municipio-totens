@@ -1,323 +1,164 @@
 # Deployment Guide
 
-## Overview
+Guia operacional baseado no estado real observado em `2026-03-26`.
 
-O projeto usa Vercel para deploy das aplicações frontend e Supabase para Edge Functions e banco de dados.
+## Resumo Executivo
 
-## Arquitetura de Deploy
+O projeto possui infraestrutura conectada, mas o fluxo de deploy ainda nao e confiavel para producao:
+- GitHub Actions configurado, porem bloqueado por billing issue
+- projetos Vercel existentes e buildando em alguns deploys
+- deploys observados do totem e do admin protegidos por login da Vercel
+- `main` remoto estava mais novo que os ultimos deploys `READY` observados
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                     VERCEL                              │
-│  ┌─────────────────┐      ┌─────────────────┐          │
-│  │   totem-pwa     │      │   admin-web     │          │
-│  │  Production     │      │   Production    │          │
-│  │  Branch: main   │      │   Branch: main  │          │
-│  └─────────────────┘      └─────────────────┘          │
-└─────────────────────────────────────────────────────────┘
-                    │                    │
-                    ▼                    ▼
-┌─────────────────────────────────────────────────────────┐
-│                     SUPABASE CLOUD                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │  PostgreSQL │  │ Edge Fn     │  │    Auth     │    │
-│  │  Production │  │ Production  │  │  (future)   │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘    │
-└─────────────────────────────────────────────────────────┘
-```
+## Fonte de Verdade por Camada
 
-## Supabase
+| Camada | Fonte principal |
+| --- | --- |
+| Codigo | GitHub (`warpdevlrds/municipio-totens`) |
+| Frontend hospedado | Vercel (`totem-pwa`, `admin-web`) |
+| Banco e funcoes | Supabase (`nyjsclgdhxsqvncnrlxe`) |
 
-### Project ID
+## GitHub Actions
 
-```
-nyjsclgdhxsqvncnrlxe
-```
+Workflow versionado:
+- `.github/workflows/deploy.yml`
 
-### Region
+Comportamento atual:
+- dispara em `push` para `main`
+- executa jobs separados para `totem-pwa` e `admin-web`
+- usa `vercel pull`, `vercel build --prod` e `vercel deploy --prebuilt --prod`
 
-São Paulo (`sa-east-1`)
+Bloqueio atual:
+- os runs recentes falharam antes de iniciar jobs com a mensagem de conta bloqueada por billing issue
 
-### Dashboard
-
-https://supabase.com/dashboard/project/nyjsclgdhxsqvncnrlxe
-
-### Variáveis de Ambiente (Edge Functions)
-
-Configuradas automaticamente via `supabase secrets`:
-
-```bash
-# NÃO configurar via CLI (já está no projeto)
-supabase secrets list
-```
-
-## Edge Functions Deploy
-
-### Deploy Individual
-
-```bash
-# Ativar CLI
-supabase login
-
-# Linkar projeto
-supabase link --project-ref nyjsclgdhxsqvncnrlxe
-
-# Deploy função específica
-supabase functions deploy activate-totem
-supabase functions deploy sync-evaluations
-supabase functions deploy heartbeat
-```
-
-### Deploy Todas
-
-```bash
-# Deploy todas as funções
-for dir in supabase/functions/*/; do
-  supabase functions deploy "$(basename "$dir")"
-done
-```
-
-### Secrets
-
-Edge Functions usam Service Role Key (automático via Supabase):
-
-```
-SUPABASE_URL=https://nyjsclgdhxsqvncnrlxe.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<secret>
-```
-
-### Monitoring
-
-```bash
-# Ver logs
-supabase functions log activate-totem
-supabase functions log sync-evaluations
-supabase functions log heartbeat
-```
+Ate isso ser resolvido:
+- nao trate o CI/CD como confiavel
+- qualquer deploy deve ser validado manualmente
 
 ## Vercel
 
-### Project Setup
+### Projetos Verificados
 
-1. Acessar https://vercel.com/dashboard
-2. Importar repositório GitHub
-3. Configurar frameworks detection (Vite)
-
-### Apps
-
-| App | GitHub | Production URL |
-|-----|--------|----------------|
-| totem-pwa | warpdevlrds/municipio-totens | totem-pwa.vercel.app |
-| admin-web | warpdevlrds/municipio-totens | admin-web.vercel.app |
+| Projeto | Root directory | Build | Output |
+| --- | --- | --- | --- |
+| `totem-pwa` | `apps/totem-pwa` | `pnpm --filter @municipio-totens/totem-pwa... build` | `dist` |
+| `admin-web` | `apps/admin-web` | `pnpm --filter @municipio-totens/admin-web... build` | `dist` |
 
 ### Environment Variables
 
+Variaveis observadas nos dois projetos:
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+Escopos observados:
+- `development`: presente
+- `production`: presente
+- `preview`: presente apenas para a branch `codex/deploy-hardening`
+
+Impacto:
+- a estrategia de preview nao cobre de forma consistente novas branches
+
+### Publicacao
+
+Os aliases observados na auditoria foram:
+- `https://totem-pwa.vercel.app`
+- `https://admin-web-five-nu.vercel.app`
+
+Problema verificado:
+- ao abrir os aliases principais no navegador, houve redirecionamento para `vercel.com/login`
+
+Antes de rollout real:
+- remover a protecao de login do totem publico
+- decidir se o admin tambem sera publico, protegido por auth de app, ou se continuara protegido no edge da Vercel
+
+### Deploy Manual Controlado
+
+Use este fluxo apenas enquanto o CI nao estiver confiavel:
+
 ```bash
-# Vercel Dashboard → Settings → Environment Variables
-
-# totem-pwa
-VITE_SUPABASE_URL=https://nyjsclgdhxsqvncnrlxe.supabase.co
-VITE_SUPABASE_ANON_KEY=<your-anon-key>
-
-# admin-web
-VITE_SUPABASE_URL=https://nyjsclgdhxsqvncnrlxe.supabase.co
-VITE_SUPABASE_ANON_KEY=<your-anon-key>
-```
-
-### Deploy via CLI
-
-```bash
-# Instalar Vercel CLI
-npm i -g vercel
-
-# Login
-vercel login
-
-# Deploy totem-pwa
 cd apps/totem-pwa
-vercel --prod
+vercel pull --yes --environment=production
+vercel build --prod
+vercel deploy --prebuilt --prod
 
-# Deploy admin-web
-cd apps/admin-web
-vercel --prod
+cd ..\\admin-web
+vercel pull --yes --environment=production
+vercel build --prod
+vercel deploy --prebuilt --prod
 ```
 
-### Deploy Automático (GitHub Actions)
+Depois:
+- abra o alias publicado
+- confirme que nao ha redirecionamento indevido para login
+- valide console, assets e variaveis em runtime
 
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy
+## Supabase
 
-on:
-  push:
-    branches: [main]
+### Projeto
+- Project ref: `nyjsclgdhxsqvncnrlxe`
+- Regiao: Sao Paulo
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: pnpm/action-setup@v2
-        with:
-          version: 10
-          
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
-          
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      
-      - uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_TOTEM }}
-          working-directory: ./apps/totem-pwa
-```
+### Migrations
 
-## Database Migrations
-
-### Push Local → Production
+Fluxo recomendado:
 
 ```bash
 supabase link --project-ref nyjsclgdhxsqvncnrlxe
+supabase migration list
 supabase db push
 ```
 
-### Reset Production DB
-
-```bash
-# CUIDADO: Remove todos os dados
-supabase db reset --project-ref nyjsclgdhxsqvncnrlxe
-```
-
-### Migration Status
-
-```bash
-supabase migration list --project-ref nyjsclgdhxsqvncnrlxe
-```
-
-## Checklist de Deploy
-
-### Pré-Deploy
-- [ ] Build local funcionando: `pnpm build`
-- [ ] TypeScript sem erros: `pnpm build --filter=totem-pwa`
-- [ ] Variáveis de ambiente configuradas
+Observacao:
+- o estado auditado mostrou migrations locais e remotas alinhadas
+- nao use `supabase db reset` em producao
 
 ### Edge Functions
-- [ ] Funções deployadas
-- [ ] Secrets configurados
-- [ ] Testar activate-totem
-- [ ] Testar sync-evaluations
-- [ ] Testar heartbeat
+
+Deploy:
+
+```bash
+supabase functions deploy activate-totem
+supabase functions deploy sync-evaluations
+supabase functions deploy heartbeat
+supabase functions list
+```
+
+Rollback pratico:
+- voltar o codigo para um commit conhecido
+- redeployar a function a partir desse commit
+
+Nao use:
+- `--no-verify-jwt` como procedimento padrao
+
+## Checklist de Validacao Pos-Deploy
 
 ### Frontend
-- [ ] Vercel projects criados
-- [ ] Environment variables configuradas
-- [ ] Deploy production
-- [ ] URLs funcionando
+- `pnpm build` passou localmente
+- alias abre sem protecao indevida
+- `manifest.json` e `sw.js` servidos corretamente
+- console sem erros criticos
+- `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` presentes
 
-### Pós-Deploy
-- [ ] Testar fluxo completo
-- [ ] Monitorar logs
-- [ ] Configurar alerts (futuro)
+### Totem
+- ativacao com chave valida funciona
+- questionarios aparecem apos ativacao
+- avaliacao fica salva offline se a rede cair
+- sincronizacao recupera os itens pendentes quando a rede volta
 
-## Domínios Customizados
-
-### Vercel
-
-```bash
-# Adicionar domínio customizado
-vercel domains add avaliacao.prefeitura.sp.gov.br
-
-# Configurar DNS
-# Type: CNAME
-# Name: avaliacao
-# Value: cname.vercel-dns.com
-```
+### Admin
+- login funciona
+- CRUD basico funciona
+- relatorios nao quebram
+- configuracoes nao caem silenciosamente em comportamento divergente
 
 ### Supabase
+- migrations continuam alinhadas
+- functions list mostra versao ativa esperada
+- tabelas sensiveis nao receberam mudanca manual fora de migration
 
-Domínios customizados via Supabase Dashboard:
-Settings → Domains → Add Custom Domain
-
-## Monitoramento
-
-### Supabase
-
-- Dashboard: https://supabase.com/dashboard/project/nyjsclgdhxsqvncnrlxe
-- Logs: Edge Functions → Functions → [nome] → Logs
-- Metrics: Database → Metrics
-
-### Vercel
-
-- Dashboard: https://vercel.com/dashboard
-- Analytics: Enabled por padrão
-- Speed Insights: Enabled por padrão
-
-## Rollback
-
-### Edge Functions
-
-```bash
-# Ver versões
-supabase functions list
-
-# Deploy versão específica
-supabase functions deploy activate-totem --no-verify-jwt
-```
-
-### Vercel
-
-```bash
-# Ver deployments
-vercel ls
-
-# Rollback
-vercel rollback <deployment-url>
-```
-
-## Troubleshooting
-
-### Edge Functions 500
-
-```bash
-# Ver logs
-supabase functions log <function-name>
-
-# Verificar secrets
-supabase secrets list
-```
-
-### Vercel Build Failed
-
-1. Verificar `pnpm build` localmente
-2. Verificar logs no Vercel Dashboard
-3. Confirmar environment variables
-
-### Database Connection Failed
-
-1. Verificar Supabase status: https://status.supabase.com
-2. Verificar IP allowlist
-3. Verificar RLS policies
-
-## Custos
-
-### Supabase Free Tier
-
-| Recurso | Limite |
-|---------|--------|
-| Edge Functions | 500K invocations/mês |
-| Database | 500MB |
-| Bandwidth | 2GB/mês |
-| Auth | 50K MAU |
-
-### Vercel Hobby
-
-| Recurso | Limite |
-|---------|--------|
-| Bandwidth | 100GB/mês |
-| Serverless Functions | 100K invocations |
+## Produção: O Que Falta
+- destravar o billing do GitHub Actions
+- reconfigurar preview/prod na Vercel
+- resolver o redirecionamento para login nos aliases do totem
+- endurecer seguranca do banco e das funcoes antes de expor a aplicacao publicamente
+- formalizar rollback e observabilidade

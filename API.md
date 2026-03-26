@@ -1,310 +1,196 @@
-# API Reference
+# API
+
+Referencia das integracoes backend atualmente usadas pelo projeto.
+
+## Panorama
+
+O sistema usa duas formas de acesso ao backend:
+- Edge Functions do Supabase, principalmente pelo `totem-pwa`
+- acesso direto a tabelas via cliente Supabase no browser, principalmente pelo `admin-web`
+
+O segundo modelo existe hoje, mas e um dos principais riscos da arquitetura atual.
+
+## Base
+
+Projeto Supabase:
+- URL: `https://nyjsclgdhxsqvncnrlxe.supabase.co`
+- Functions base: `https://nyjsclgdhxsqvncnrlxe.supabase.co/functions/v1`
+
+Wrapper de cliente:
+- `packages/supabase-client/src/index.ts`
 
 ## Edge Functions
 
-Todas as Edge Functions estão disponíveis em `https://nyjsclgdhxsqvncnrlxe.supabase.co/functions/v1/`
+### `activate-totem`
 
-### Autenticação
+Objetivo:
+- validar uma chave de ativacao
+- marcar o totem como online
+- devolver questionarios ativos para aquele totem
 
-Edge Functions usam a chave ANON do Supabase via header:
-```
-apikey: <SUPABASE_ANON_KEY>
-```
+Request:
 
-### CORS
-
-Todas as funções habilitam CORS com:
-```
-Access-Control-Allow-Origin: *
-```
-
----
-
-## activate-totem
-
-Ativa totem com chave de ativação única.
-
-### Endpoint
-
-```
-POST /functions/v1/activate-totem
-```
-
-### Request Body
-
-```typescript
+```json
 {
-  chave_ativacao: string;  // Chave de ativação (ex: "ATIV-123456")
-  codigo_totem: string;    // Código do totem (ex: "TOTEM-001")
-  versao_app: string;      // Versão do app (ex: "1.0.0")
+  "chave_ativacao": "ATIV-TOT001",
+  "codigo_totem": "TOTEM-001",
+  "versao_app": "1.0.0"
 }
 ```
 
-### Response 200 (Sucesso)
+Response de sucesso:
 
-```typescript
+```json
 {
-  success: true;
-  totem_id: string;        // UUID do totem
-  totem_codigo: string;    // Código do totem
-  unidade_id: string;      // UUID da unidade
-  questionarios: Questionario[]; // Questionários disponíveis
-  ativado_em: string;      // ISO timestamp
+  "success": true,
+  "totem_id": "uuid",
+  "totem_codigo": "TOTEM-001",
+  "unidade_id": "uuid",
+  "questionarios": [],
+  "ativado_em": "2026-03-26T12:00:00.000Z"
 }
 ```
 
-### Response 400 (Erro)
+Comportamento atual:
+- valida se a chave pertence ao totem
+- rejeita chave expirada ou ja usada
+- retorna questionarios com `questoes` ordenadas
 
-```typescript
+Limitacoes atuais:
+- nao emite credencial duravel de dispositivo
+- depende de chave de uso unico exibida/gerada a partir do admin atual
+
+### `sync-evaluations`
+
+Objetivo:
+- enviar avaliacoes pendentes do IndexedDB para o banco
+
+Request:
+
+```json
 {
-  error: string;           // Mensagem de erro
+  "totem_id": "uuid",
+  "avaliacoes": [
+    {
+      "client_id": "uuid",
+      "questionario_id": "uuid",
+      "session_id": "sess_123",
+      "ip_address": "127.0.0.1",
+      "created_at": "2026-03-26T12:00:00.000Z",
+      "respostas": [
+        {
+          "questao_id": "uuid",
+          "valor_nota": 5
+        }
+      ]
+    }
+  ]
 }
 ```
 
-### Response 401 (Chave Inválida)
+Response de sucesso:
 
-```typescript
+```json
 {
-  error: "Chave de ativação inválida ou já utilizada"
+  "success": true,
+  "synced": 1,
+  "errors": 0,
+  "synced_ids": ["uuid"],
+  "error_details": []
 }
 ```
 
-### Response 404 (Totem Não Encontrado)
+Comportamento atual:
+- deduplica por `session_id + client_id`
+- grava `avaliacoes` e `respostas` com service role
+- registra `sync_log`
+- remove a avaliacao pai se a insercao de respostas falhar
 
-```typescript
+Limitacoes atuais:
+- aceita qualquer `totem_id` informado pelo cliente
+- nao faz autenticacao forte do dispositivo
+- nao possui rate limit ou assinatura de payload
+
+### `heartbeat`
+
+Objetivo:
+- atualizar `ultimo_ping`
+- manter `totem_sessoes`
+- informar versoes ativas de questionarios
+
+Request:
+
+```json
 {
-  error: "Totem não encontrado"
+  "totem_id": "uuid",
+  "ip_address": "127.0.0.1"
 }
 ```
 
-### Response 409 (Já Ativado)
+Response de sucesso:
 
-```typescript
+```json
 {
-  error: "Chave de ativação já utilizada";
-  ativado_em: string;
+  "success": true,
+  "timestamp": "2026-03-26T12:00:00.000Z",
+  "totem_status": "online",
+  "questionarios": [
+    {
+      "id": "uuid",
+      "versao": 1,
+      "updated_at": "2026-03-26T12:00:00.000Z"
+    }
+  ]
 }
 ```
 
-### Exemplo de Uso
+Comportamento atual:
+- atualiza o status do totem para `online`
+- cria ou atualiza sessao em `totem_sessoes`
+- devolve lista de questionarios ativos e disponiveis por unidade
 
-```typescript
-import { activateTotem } from '@municipio-totens/supabase-client'
+Limitacoes atuais:
+- o backend nao valida identidade do totem alem do `totem_id`
+- o frontend atual nao conclui o refresh de questionario a partir da resposta
 
-const result = await activateTotem(
-  'CHAVE-ATIVACAO-123',
-  'totem-001',
-  '1.0.0'
-)
+## Cliente Compartilhado
 
-if (result.success) {
-  console.log('Totem ativado:', result.totem_id)
-  // Cachear questionários
-  await cacheQuestionarios(result.questionarios)
-}
-```
+O package `packages/supabase-client` expõe:
+- `activateTotem`
+- `syncEvaluations`
+- `heartbeat`
+- `supabase` para consultas diretas
 
----
+Observacao:
+- esse mesmo cliente anonimo e usado pelo admin para falar com o banco diretamente
 
-## sync-evaluations
+## Uso Direto do Supabase no Admin
 
-Sincroniza avaliações pendentes do IndexedDB para o servidor.
+Hoje o `admin-web` executa diretamente do browser:
+- CRUD de `unidades`
+- CRUD de `totens`
+- CRUD de `questionarios`
+- CRUD de `questoes`
+- leitura de `avaliacoes`, `respostas` e `configuracoes`
 
-### Endpoint
+Consequencia:
+- a seguranca da camada administrativa depende quase inteiramente das policies do banco
+- como essas policies estao amplamente abertas, o frontend atual nao pode ser considerado seguro para producao
 
-```
-POST /functions/v1/sync-evaluations
-```
+## Contratos Operacionais Reais
 
-### Request Body
+O totem depende de:
+- `activate-totem` para bootstrap
+- `sync-evaluations` para flush da fila local
+- `heartbeat` para presence e atualizacao
 
-```typescript
-{
-  totem_id: string;
-  avaliacoes: {
-    client_id: string;           // ID único da avaliação
-    questionario_id: string;     // UUID do questionário
-    session_id: string;          // ID da sessão
-    ip_address?: string;         // IP do cliente
-    respostas: {
-      questao_id: string;        // UUID da questão
-      valor_nota?: number;       // Valor numérico (1-10)
-      valor_texto?: string;      // Texto livre
-    }[];
-    created_at: string;          // ISO timestamp
-  }[];
-}
-```
+O admin depende de:
+- Supabase Auth para sessao basica
+- acesso direto ao Postgres via API REST do Supabase
 
-### Response 200 (Sucesso)
+## O Que Precisa Mudar
 
-```typescript
-{
-  success: true;
-  synced: number;                 // Quantidade sincronizada
-  errors: number;                 // Quantidade com erro
-  synced_ids: string[];           // IDs sincronizados
-  error_details: {               // Detalhes dos erros
-    client_id: string;
-    error: string;
-  }[];
-}
-```
-
-### Response 400 (Erro)
-
-```typescript
-{
-  error: string;                 // Mensagem de erro
-}
-```
-
-### Exemplo de Uso
-
-```typescript
-import { syncEvaluations } from '@municipio-totens/supabase-client'
-import { getPendingEvaluations, markAsSynced } from '@municipio-totens/offline-sync'
-
-const pending = await getPendingEvaluations()
-
-if (pending.length > 0) {
-  const result = await syncEvaluations(totemId, pending)
-  
-  if (result.success) {
-    await markAsSynced(result.synced_ids)
-    console.log(`Sincronizadas ${result.synced} avaliações`)
-  }
-}
-```
-
----
-
-## heartbeat
-
-Mantém sessão ativa e verifica updates de questionários.
-
-### Endpoint
-
-```
-POST /functions/v1/heartbeat
-```
-
-### Request Body
-
-```typescript
-{
-  totem_id: string;              // UUID do totem
-  ip_address?: string;           // IP do cliente
-}
-```
-
-### Response 200 (Sucesso)
-
-```typescript
-{
-  success: true;
-  timestamp: string;              // ISO timestamp
-  totem_status: string;          // Status do totem
-  questionarios: {               // Questionários atualizados
-    id: string;
-    versao: number;
-    updated_at: string;
-  }[];
-}
-```
-
-### Response 400 (Erro)
-
-```typescript
-{
-  error: string;                 // Mensagem de erro
-}
-```
-
-### Response 404 (Totem Não Encontrado)
-
-```typescript
-{
-  error: "Totem não encontrado"
-}
-```
-
-### Exemplo de Uso
-
-```typescript
-import { heartbeat } from '@municipio-totens/supabase-client'
-
-// A cada 30 segundos
-const result = await heartbeat(totemId, ipAddress)
-
-if (result.success) {
-  // Verificar se há questionários atualizados
-  const updated = result.questionarios.filter(q => 
-    localVersions[q.id] < q.versao
-  )
-  
-  if (updated.length > 0) {
-    // Baixar novas versões
-    await refreshQuestionarios(updated)
-  }
-}
-```
-
----
-
-## Supabase REST API
-
-Além das Edge Functions, o projeto usa a REST API do Supabase diretamente.
-
-### Tabelas Acessiveis
-
-| Tabela | Operações | Notas |
-|--------|-----------|-------|
-| totens | SELECT, UPDATE | Leituras públicas |
-| totem_ativacoes | SELECT, UPDATE | Durante ativação |
-| unidades | ALL | RLS futuro |
-| questionarios | SELECT | RLS futuro |
-| questoes | SELECT | RLS futuro |
-| avaliacoes | INSERT | Pública para totens |
-| respostas | INSERT | Pública para totens |
-
-### Exemplo de Query
-
-```typescript
-import { supabase } from '@municipio-totens/supabase-client'
-
-// Buscar totens online
-const { data } = await supabase
-  .from('totens')
-  .select('*')
-  .eq('status', 'online')
-
-// Buscar questionários com questões
-const { data } = await supabase
-  .from('questionarios')
-  .select('*, questoes(*)')
-  .eq('ativo', true)
-```
-
----
-
-## Códigos de Erro
-
-| Código | Descrição |
-|--------|-----------|
-| 400 | Parâmetros obrigatórios ausentes |
-| 401 | Autenticação inválida |
-| 404 | Recurso não encontrado |
-| 409 | Conflito (ex: ativação duplicada) |
-| 500 | Erro interno do servidor |
-
----
-
-## Rate Limits
-
-Não há rate limits configurados atualmente para Edge Functions.
-
-Para produção, considere:
-- Totem: 1 heartbeat a cada 30s
-- Batch de avaliações: max 100 por sync
-- Ativação: uso único por chave
+1. Backend administrativo autenticado para mutacoes.
+2. Credencial de dispositivo para totem apos ativacao.
+3. Rate limit e validacao adicional nas functions.
+4. Contratos de API versionados para sync e atualizacao de questionarios.

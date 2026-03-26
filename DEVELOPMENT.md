@@ -1,14 +1,25 @@
 # Development Guide
 
-## Prerequisites
+Guia de desenvolvimento alinhado ao fluxo real do repositorio.
 
-- Node.js 20+
-- pnpm 10+
-- Git
+## Principios
+- Nunca use Docker neste projeto.
+- Sempre use `pnpm`, `git`, `gh`, `supabase` e `vercel` CLI.
+- Sempre valide o estado real com CLI antes de mexer em deploy, banco ou variaveis de ambiente.
+- Padronize o ambiente local em `Node 20.x` para reduzir diferencas com a Vercel.
 
-## Setup
+## Pre-Requisitos
 
-### 1. Clone e Instale
+| Ferramenta | Versao recomendada | Observacao |
+| --- | --- | --- |
+| Node.js | `20.x` | Vercel esta em `20.x`; use a mesma versao localmente |
+| pnpm | `10+` | O lockfile atual foi validado com `10.32.1` |
+| git | atual | Necessario para sincronizar com `origin/main` |
+| gh | atual | Usado para repo, PRs, workflows e checks |
+| supabase | atual | Fluxo remoto, sem `supabase start` |
+| vercel | atual | Inspecao e deploy manual quando necessario |
+
+## Setup Local
 
 ```bash
 git clone https://github.com/warpdevlrds/municipio-totens.git
@@ -16,330 +27,136 @@ cd municipio-totens
 pnpm install
 ```
 
-### 2. Variáveis de Ambiente
+Crie os arquivos locais de ambiente a partir do template raiz:
 
 ```bash
-# Copiar template
-cp apps/totem-pwa/.env.example apps/totem-pwa/.env.local
-cp apps/admin-web/.env.example apps/admin-web/.env.local
+copy .env.example apps\\totem-pwa\\.env.local
+copy .env.example apps\\admin-web\\.env.local
 ```
+
+Variaveis necessarias:
 
 ```env
-# apps/totem-pwa/.env.local
 VITE_SUPABASE_URL=https://nyjsclgdhxsqvncnrlxe.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key-here
+VITE_SUPABASE_ANON_KEY=<anon-key-publica-do-projeto>
 ```
 
-```env
-# apps/admin-web/.env.local
-VITE_SUPABASE_URL=https://nyjsclgdhxsqvncnrlxe.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key-here
-```
-
-### 3. Obter Supabase Keys
-
-1. Acesse https://supabase.com/dashboard/project/nyjsclgdhxsqvncnrlxe
-2. Settings → API
-3. Copiar `anon public` key
-
-## Development
-
-### Iniciar Todos os Apps
+## Comandos Principais
 
 ```bash
+pnpm install
 pnpm dev
-```
-
-Isso inicia:
-- totem-pwa: http://localhost:3000
-- admin-web: http://localhost:3001
-
-### Iniciar App Específico
-
-```bash
-pnpm dev --filter=totem-pwa
-pnpm dev --filter=admin-web
-```
-
-### Build
-
-```bash
-# Build tudo
+pnpm --filter @municipio-totens/totem-pwa dev
+pnpm --filter @municipio-totens/admin-web dev
 pnpm build
-
-# Build específico
-pnpm build --filter=totem-pwa
-pnpm build --filter=admin-web
-
-# Build packages
-pnpm build --filter=@municipio-totens/types
-pnpm build --filter=@municipio-totens/supabase-client
-pnpm build --filter=@municipio-totens/offline-sync
+pnpm --filter @municipio-totens/totem-pwa build
+pnpm --filter @municipio-totens/admin-web build
 ```
 
-## Estrutura de Diretórios
+Observacao:
+- `pnpm lint` hoje nao e um gate real; o turbo reporta `0 tasks`.
+- Nao existe suite de testes automatizados versionada suficiente para tratar o projeto como protegido contra regressao.
 
-```
-municipio-totens/
-├── apps/
-│   ├── totem-pwa/           # PWA para terminais
-│   │   ├── src/
-│   │   │   ├── screens/     # Telas da aplicação
-│   │   │   ├── components/  # Componentes React
-│   │   │   ├── hooks/       # Custom hooks
-│   │   │   ├── App.tsx      # Entry point
-│   │   │   └── main.tsx     # Bootstrap
-│   │   ├── public/          # Assets estáticos
-│   │   ├── index.html       # HTML template
-│   │   ├── vite.config.ts   # Vite config
-│   │   └── package.json
-│   │
-│   └── admin-web/            # Painel administrativo
-│       ├── src/
-│       │   ├── pages/       # Páginas
-│       │   ├── components/   # Componentes
-│       │   ├── api/         # Chamadas API
-│       │   ├── App.tsx
-│       │   └── main.tsx
-│       └── ...
-│
-├── packages/
-│   ├── types/               # Interfaces TypeScript
-│   │   └── src/index.ts
-│   │
-│   ├── utils/               # Helpers
-│   │   └── src/index.ts
-│   │
-│   ├── supabase-client/     # Wrapper Supabase
-│   │   └── src/index.ts
-│   │
-│   ├── offline-sync/        # Motor offline
-│   │   └── src/index.ts
-│   │
-│   └── ui/                  # Componentes compartilhados
-│       └── src/index.ts
-│
-└── supabase/
-    ├── migrations/          # SQL migrations
-    │   └── 20240324000001_initial_schema.sql
-    │
-    └── functions/           # Edge Functions (Deno)
-        ├── activate-totem/
-        ├── sync-evaluations/
-        └── heartbeat/
-```
+## Fluxo com Supabase CLI
 
-## Packages
-
-### @municipio-totens/types
-
-Interfaces TypeScript compartilhadas.
-
-```typescript
-import type { Totem, Questionario, Questao, Avaliacao } from '@municipio-totens/types'
-```
-
-### @municipio-totens/utils
-
-Funções utilitárias.
-
-```typescript
-import { generateUUID, formatDate } from '@municipio-totens/utils'
-
-const id = generateUUID()           // UUID v4
-const date = formatDate(new Date()) // ISO string
-```
-
-### @municipio-totens/supabase-client
-
-Cliente Supabase e wrappers para Edge Functions.
-
-```typescript
-import { 
-  supabase,
-  activateTotem,
-  syncEvaluations,
-  heartbeat 
-} from '@municipio-totens/supabase-client'
-```
-
-### @municipio-totens/offline-sync
-
-Motor de sincronização offline com Dexie.js.
-
-```typescript
-import { 
-  db,
-  saveEvaluation,
-  getPendingEvaluations,
-  markAsSynced,
-  cacheQuestionarios,
-  getSetting,
-  setSetting
-} from '@municipio-totens/offline-sync'
-```
-
-## Edge Functions (Local)
-
-### Usar Supabase CLI
+Trabalhe sempre no projeto remoto linkado:
 
 ```bash
-# Instalar CLI
-npm install -g supabase
-
-# Login
 supabase login
-
-# Linkar projeto
 supabase link --project-ref nyjsclgdhxsqvncnrlxe
-
-# Iniciar ambiente local
-supabase start
-
-# Deploy funções
-supabase functions deploy activate-totem
-```
-
-### Testar Funções
-
-```bash
-# Via curl
-curl -X POST https://nyjsclgdhxsqvncnrlxe.supabase.co/functions/v1/activate-totem \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <ANON_KEY>" \
-  -d '{"chave_ativacao":"TESTE","codigo_totem":"TESTE","versao_app":"1.0.0"}'
-
-# Via Supabase CLI
-supabase functions serve activate-totem
-```
-
-## Database
-
-### Migrations
-
-```bash
-# Criar nova migration
-supabase migration new add_xyz
-
-# Push para produção
+supabase migration list
 supabase db push
-
-# Reset local
-supabase db reset
+supabase functions list
+supabase functions deploy activate-totem
+supabase functions deploy sync-evaluations
+supabase functions deploy heartbeat
 ```
 
-### Seed Data
+Nao use:
+- `supabase start`
+- `supabase status`
+- `supabase db dump`
+- qualquer fluxo que exija Docker
+
+Logs:
+- A versao de CLI validada na auditoria nao expunha `supabase functions log`.
+- Para incidentes, use o dashboard do Supabase ate que o fluxo de observabilidade seja formalizado.
+
+## Fluxo com GitHub CLI
+
+Antes de qualquer mudanca significativa:
 
 ```bash
-# Adicionar seeds em supabase/seed.sql
-# Reset com seeds
-supabase db reset
+git fetch origin --prune
+git status --short --branch
+git log -1 --oneline --decorate
+gh repo view warpdevlrds/municipio-totens
+gh workflow list --repo warpdevlrds/municipio-totens
+gh run list --repo warpdevlrds/municipio-totens --limit 10
 ```
 
-## Testes
+Estado observado na auditoria:
+- `main` local e `origin/main` estavam sincronizados
+- nao havia PRs abertos
+- nao havia branch protection em `main`
 
-### Build Tests
+## Fluxo com Vercel CLI
+
+Use a Vercel CLI para inspecao e deploy manual controlado:
 
 ```bash
-# Verificar se tudo compila
-pnpm build
+vercel whoami
+cd apps/totem-pwa
+vercel project inspect
+vercel env ls
+vercel ls
 
-# Verificar tipos
-cd packages/types && pnpm build
+cd ..\\admin-web
+vercel project inspect
+vercel env ls
+vercel ls
 ```
 
-### Manual Testing
+Observacoes verificadas:
+- ambos os projetos usam runtime `Node 20.x`
+- `preview` env vars estavam restritas a uma branch especifica (`codex/deploy-hardening`)
+- os aliases observados redirecionavam para login da Vercel, o que precisa ser resolvido antes de uso publico
 
-1. totem-pwa: http://localhost:3000
-2. Inserir código e chave de teste
-3. Verificar console para erros
-4. Testar fluxo completo de avaliação
+## Qualidade Minima Antes de Commit
 
-## Padrões de Código
+Checklist local:
+- `pnpm install`
+- `pnpm build`
+- revisar `git diff`
+- revisar impacto em migrations, functions e docs
 
-### Nomenclatura
-
-| Tipo | Convenção | Exemplo |
-|------|-----------|---------|
-| Tabelas | snake_case | `totem_ativacoes` |
-| Interfaces | PascalCase | `TotemAtivacao` |
-| Funções | camelCase | `saveEvaluation` |
-| Variáveis | camelCase | `totemId` |
-| Constantes | UPPER_SNAKE | `MAX_RETRIES` |
-
-### Imports
-
-```typescript
-// Sempre usar workspace imports
-import type { Totem } from '@municipio-totens/types'
-import { generateUUID } from '@municipio-totens/utils'
-import { db } from '@municipio-totens/offline-sync'
-```
-
-### TypeScript
-
-```typescript
-// Usar interfaces para objetos
-interface Totem {
-  id: string
-  codigo: string
-}
-
-// Usar types para unions
-type TotemStatus = 'offline' | 'online' | 'manutencao'
-
-// Exports
-export type { Totem }
-export { TotemStatus }
-```
-
-## Linting
-
-```bash
-pnpm lint
-```
-
-## Git Hooks
-
-Husky configurado (futuro):
-- pre-commit: lint
-- pre-push: build
+Checklist adicional quando houver mudanca de infraestrutura:
+- `supabase migration list`
+- `supabase functions list`
+- `vercel env ls`
+- `gh run list`
 
 ## Troubleshooting
 
-### "No inputs were found"
+### Build passa local e falha na Vercel
+- confirme `Node 20.x` localmente
+- confirme que o app builda a partir da raiz do monorepo
+- confira se o projeto Vercel esta com root directory correto
 
-Verificar se existe `src/index.ts` no package.
+### Deploy pronto, mas URL pede login
+- revisar Vercel Deployment Protection
+- separar preview protegido de deploy publico do kiosk
 
-### "Cannot find type definition"
+### Dados do admin salvam "sem erro", mas comportamento e estranho
+- verifique policies RLS
+- lembre que o admin hoje grava direto no banco pelo browser
 
-Adicionar `"types": ["vite/client"]` no tsconfig.json.
+### Totem ativa, mas nao opera offline corretamente
+- revisar cache em `useTotem`
+- revisar resposta de `activate-totem`
+- revisar ciclo de refresh em `heartbeat`
 
-### Build falha em package
-
-```bash
-# Rebuild package
-cd packages/types && pnpm build
-
-# Limpar cache Turbo
-pnpm clean
-pnpm build
-```
-
-### Supabase CLI não conecta
-
-```bash
-# Verificar status
-supabase status
-
-# Reiniciar
-supabase stop && supabase start
-```
-
-## Recursos
-
-- [React Docs](https://react.dev)
-- [TypeScript Handbook](https://www.typescriptlang.org/docs/)
-- [Supabase Docs](https://supabase.com/docs)
-- [Dexie.js Docs](https://dexie.org/docs/)
-- [Turborepo Docs](https://turbo.build/repo/docs)
+## O Que Este Guia Nao Promete
+- Nao existe ambiente local de Supabase via Docker
+- Nao existe pipeline de testes automatizados completo
+- Nao existe hoje um fluxo seguro de administracao pronto para producao

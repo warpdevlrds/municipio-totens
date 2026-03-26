@@ -1,105 +1,32 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-
-## [1.0.0] - 2024-XX-XX
-
-### Added
-
-#### Infrastructure
-- Monorepo setup with pnpm workspaces and Turborepo 2.0
-- 5 packages: types, utils, ui, supabase-client, offline-sync
-- 2 apps: totem-pwa, admin-web
-- Build pipeline with turbo.json
-
-#### Database Schema
-- 9 tables with RLS policies
-- Enums: totem_status, avaliacao_status, questao_tipo
-- Automatic updated_at triggers
-- Indexes for performance
-
-#### Edge Functions
-- `activate-totem` - Totem activation with unique key
-- `sync-evaluations` - Batch evaluation synchronization
-- `heartbeat` - Keep-alive and session management
-
-#### Packages
-- `@municipio-totens/types` - Shared TypeScript interfaces
-- `@municipio-totens/utils` - Helpers (generateUUID, formatDate)
-- `@municipio-totens/offline-sync` - Dexie.js storage with sync engine
-- `@municipio-totens/supabase-client` - Edge Functions wrapper
-- `@municipio-totens/ui` - Shared components (stub)
-
-#### Apps
-- `totem-pwa` - PWA for kiosk terminals (basic structure)
-- `admin-web` - Admin panel (basic structure)
-
-### Documentation
-- README.md - Project overview
-- ARCHITECTURE.md - System architecture
-- API.md - Edge Functions API reference
-- DATABASE.md - Database schema documentation
-- DEPLOYMENT.md - Deployment guide
-- DEVELOPMENT.md - Development guide
-- CONTRIBUTING.md - Contribution guidelines
-- TODO.md - Task list and progress
-- CHANGELOG.md - This file
-
-### Configuration
-- Supabase project linked (nyjsclgdhxsqvncnrlxe)
-- Vercel projects configured
-- Environment variables documented
+Este repositorio ainda nao possui release formal, tag estavel ou versionamento semantico publicado.
+Os registros abaixo descrevem marcos relevantes verificados no codigo e na infraestrutura.
 
 ## [Unreleased]
 
-### totem-pwa (In Progress)
-- [ ] Activation screen
-- [ ] Questionnaire rendering
-- [ ] Evaluation collection
-- [ ] Offline storage
-- [ ] Auto-sync
-- [ ] Thank you screen
-- [ ] PWA manifest + service worker
+### Changed - 2026-03-26
+- Documentacao reescrita para refletir o estado real do monorepo, do Supabase, do Vercel e do GitHub.
+- `README.md` recriado como ponto de entrada canonico do projeto.
+- `ROADMAP.md` e `TODO.md` alinhados ao backlog tecnico real identificado na auditoria.
+- `FAQ.md`, `GLOSSARY.md` e `SUPPORT.md` movidos para `docs/archive/2026-03-26-legacy/`.
 
-### admin-web (In Progress)
-- [ ] Dashboard with statistics
-- [ ] CRUD units
-- [ ] CRUD totens
-- [ ] CRUD questionnaires
-- [ ] CRUD questions
-- [ ] View evaluations
-- [ ] Filters and reports
-- [ ] Admin authentication
+### Verified - 2026-03-26
+- Repositorio remoto: `warpdevlrds/municipio-totens`
+- Branch padrao: `main`
+- Commit sincronizado local/remoto: `1d3f333c2ad5e5cdfcfa567fd17382fd658b2789`
+- Projeto Supabase linkado: `nyjsclgdhxsqvncnrlxe`
+- Migrations local/remoto alinhadas: `20240324000001`, `20260324050000`, `20260324064213`, `20260324081000`, `20260324132000`
+- Edge Functions ativas: `activate-totem`, `sync-evaluations`, `heartbeat`
+- Projetos Vercel existentes: `totem-pwa`, `admin-web`
 
-### offline-sync (In Progress)
-- [ ] SyncManager with retry logic
-- [ ] Online/offline listeners
-- [ ] Background sync
-- [ ] Sync queue
+### Known Issues
+- Workflow de deploy do GitHub Actions existe, mas os runs recentes falharam antes de iniciar jobs por bloqueio de billing da conta.
+- Deploys publicados na Vercel estao protegidos por login da Vercel, o que bloqueia o uso publico do totem.
+- O cache offline do totem nao persiste as questoes retornadas na ativacao.
+- O admin acessa o banco diretamente com cliente anonimo e depende de policies amplamente permissivas.
 
-### Database (In Progress)
-- [ ] Seed data
-- [ ] Users/profiles tables
-- [ ] Audit log
+## Historical Note
 
-### Edge Functions (In Progress)
-- [ ] Auth function
-- [ ] Key generation function
-- [ ] Reports/aggregations function
-
-### Deployment (In Progress)
-- [ ] Vercel configuration
-- [ ] CI/CD pipeline
-- [ ] Environment variables
-
----
-
-## Migration Notes
-
-### v1.0.0
-Initial release with basic infrastructure and partial implementation.
-
-### Future Migrations
-[Add migration notes here as needed]
+Toda a documentacao anterior ao reset de `2026-03-26` deve ser considerada apenas referencia historica.
+Antes de executar mudancas operacionais, sempre valide o estado atual com `git`, `gh`, `supabase` e `vercel` CLI.
